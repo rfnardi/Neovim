@@ -4,13 +4,8 @@ Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cr
 Plug 'neoclide/coc.nvim', {'branch': 'version'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
-"Plug 'scrooloose/nerdtree'
-"Plug 'ryanoasis/vim-devicons'
-"Plug 'tsony-tsonev/nerdtree-git-plugin'
 Plug 'honza/vim-snippets'
 call plug#end()
-
-"NeoBundle 'tiagofumo/vim-nerdtree-syntax-highlight'
 
 colorscheme gruvbox
 set background=dark
@@ -57,6 +52,7 @@ set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas a
 
 let mapleader="\<space>"
 nnoremap <leader>; A;<esc>  " vai pro final da linha e digita ';'
+nnoremap <tab> i<tab>
 nnoremap <leader>s :%s/
 nnoremap <leader>ç :vs ~/.config/nvim/init.vim <esc>
 
