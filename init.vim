@@ -27,6 +27,14 @@ let g:NERDTreeGitStatusWithFlags = 1
 :  autocmd BufLeave,FocusLost,InsertEnter   * set norelativenumber
 :augroup END
 
+":verbose imap <tab> # to make sure keymap for coc-nvim take effect
+
+" GoTo code navigation:
+" Ctrl + o goes back
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
 
 set nocompatible 	        " disable compatibility to old-time vi
 set showmatch 		        " show matching brackets
@@ -50,14 +58,22 @@ syntax on                   " syntax highlighting
 set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas as ocorrências de old no arquivo. tb funciona 
                                     " para a substituição ':%s/old/new '
 
-let mapleader="\<space>"
-nnoremap <leader>; A;<esc>  " vai pro final da linha e digita ';'
-nnoremap <tab> i<tab>
-nnoremap <leader>s :%s/
-nnoremap <leader>ç :vs ~/.config/nvim/init.vim <esc>
+"let mapleader="\<space>"
 
-nnoremap <leader>m :mkview<esc> 
+"insere um espaço e volta pro modo normal
+nnoremap <space> i<space><esc>
+
+"vai pro final da linha e digita ';'
+nnoremap <A-;> A;<esc>
+
+nnoremap <tab> i<tab>
+nnoremap <A-s> :%s/
+nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
+
+nnoremap <A-m> :mkview<esc>
 " grava as folds para serem carregadas na próxima vez com o arquivo for aberto
 
-nnoremap <leader>l :loadview<esc> 
+nnoremap <A-l> :loadview<esc>
 " carrega as folds gravadas com o :makeview
+
+vnoremap <C-c> "*y
