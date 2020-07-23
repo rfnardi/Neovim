@@ -4,6 +4,7 @@ Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cr
 Plug 'neoclide/coc.nvim', {'branch': 'version'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
+Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
 call plug#end()
 
@@ -63,6 +64,9 @@ set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas a
 "insere um espaço e volta pro modo normal
 nnoremap <space> i<space><esc>
 
+" insere uma linha vazia abaixo da atual e volta para o modo normal:
+nnoremap <return> o<esc>
+
 "vai pro final da linha e digita ';'
 nnoremap <A-;> A;<esc>
 
@@ -73,7 +77,17 @@ nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
 nnoremap <A-m> :mkview<esc>
 " grava as folds para serem carregadas na próxima vez com o arquivo for aberto
 
-nnoremap <A-l> :loadview<esc>
 " carrega as folds gravadas com o :makeview
+nnoremap <A-l> :loadview<esc>
 
+" mudança entre janelas
+nnoremap <A-,> <C-w>h
+nnoremap <A-.> <C-w>l
+
+" Ctrl + c : copia para o registrador y:
 vnoremap <C-c> "*y
+
+" movimentação entre buffers:
+nnoremap <A-j> :bp<return>
+nnoremap <A-k> :bn<return>
+
