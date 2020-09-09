@@ -1,10 +1,10 @@
 call plug#begin()
 Plug 'morhetz/gruvbox'                      " aparência/esquemas de cores
 Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cria multiplos cursores
-Plug 'neoclide/coc.nvim', {'branch': 'version'}
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
-Plug 'tpope/vim-surround'
+"Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
 call plug#end()
 
@@ -15,7 +15,7 @@ autocmd vimenter * NERDTree
 let g:NERDTreeGitStatusWithFlags = 1
 
 :set noswapfile
-"set hidden                  " permite abrir outro buffer mesmo sem salvar o arquivo atual
+set hidden                  " permite abrir outro buffer mesmo sem salvar o arquivo atual
 
 "set relativenumber
 "set number                  " add line numbers
@@ -62,7 +62,7 @@ set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas a
 "let mapleader="\<space>"
 
 "insere um espaço e volta pro modo normal
-nnoremap <space> i<space><esc>
+nnoremap <space> a<space><esc>
 
 " insere uma linha vazia abaixo da atual e volta para o modo normal:
 nnoremap <return> o<esc>
