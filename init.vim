@@ -11,6 +11,7 @@ call plug#end()
 " ao reinstalar o nvim, rodar estes comandos para habilitar o intelisense das
 " linguagens do coc:
 " 
+":CocInstall coc-texlab
 ":CocInstall coc-html
 ":CocInstall coc-clangd
 ":CocInstall coc-cmake
