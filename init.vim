@@ -4,7 +4,7 @@ Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cr
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
-"Plug 'tpope/vim-surround'
+Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
 call plug#end()
 
@@ -86,6 +86,7 @@ nnoremap <A-;> A;<esc>
 nnoremap <tab> i<tab>
 nnoremap <A-s> :%s/
 nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
+nnoremap <A-[> :NERDTree <esc>
 
 nnoremap <A-m> :mkview<esc>
 " grava as folds para serem carregadas na próxima vez com o arquivo for aberto
