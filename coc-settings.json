@@ -1,0 +1,7 @@
+{"languageserver": {
+  "latex": {
+    "command": "/texlab",
+    "ignoredRootPaths": ["~"],
+    "filetypes": ["tex", "bib", "plaintex", "context"]
+  }
+}}

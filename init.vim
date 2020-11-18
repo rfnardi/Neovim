@@ -4,9 +4,12 @@ Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cr
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
+"Plug 'pappasam/coc-jedi', { 'do': 'yarn install --frozen-lockfile && yarn build' }
+Plug 'lervag/vimtex'
 Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
 call plug#end()
+
 
 " ao reinstalar o nvim, rodar estes comandos para habilitar o intelisense das
 " linguagens do coc:
