@@ -10,8 +10,8 @@ Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
 call plug#end()
 
+disable_startup_warning = 1  "específico do raspberrypi
 
-" ao reinstalar o nvim, rodar estes comandos para habilitar o intelisense das
 " linguagens do coc:
 " 
 ":CocInstall coc-texlab
@@ -88,7 +88,10 @@ nnoremap <A-;> A;<esc>
 
 nnoremap <tab> i<tab>
 nnoremap <A-s> :%s/
-nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
+
+"caminho específico do arquivo de configuração do raspberrypi:
+nnoremap <A-ç> :vs /home/pi/.config/nvim/init.vim <esc> 
+
 nnoremap <A-[> :NERDTree <esc>
 
 nnoremap <A-m> :mkview<esc>

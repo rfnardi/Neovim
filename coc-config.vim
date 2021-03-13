@@ -1,0 +1,9 @@
+:CocInstall coc-texlab
+:CocInstall coc-html
+:CocInstall coc-clangd
+:CocInstall coc-cmake
+:CocInstall coc-json
+:CocInstall coc-python
+:CocInstall coc-sh
+:CocInstall coc-tsserver
+:CocInstall coc-snippets
