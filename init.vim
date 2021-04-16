@@ -76,9 +76,28 @@ set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas a
                                     " para a substituição ':%s/old/new '
 
 "let mapleader="\<space>"
-
+"
 "insere um espaço e volta pro modo normal
 nnoremap <space> a<space><esc>
+
+"***************************************************
+"wrapping seleção com chaves, parênteses e colchetes:
+"circunda o texto selecionado no modo visual com ()
+vnoremap <A-(> di()<esc>hp
+
+"circunda o texto selecionado no modo visual com {}
+vnoremap <A-{> di{}<esc>hp
+
+"circunda o texto selecionado no modo visual com []
+vnoremap <A-[> di[]<esc>hp
+
+"completamento de brackets:
+inoremap ( ( )<esc>hi
+inoremap { { }<esc>hi
+inoremap [ [ ]<esc>hi
+inoremap " " "<esc>hi
+inoremap ' ' '<esc>hi
+"***************************************************
 
 " insere uma linha vazia abaixo da atual e volta para o modo normal:
 nnoremap <return> o<esc>
@@ -100,11 +119,15 @@ nnoremap <A-l> :loadview<esc>
 " mudança entre janelas
 nnoremap <A-,> <C-w>h
 nnoremap <A-.> <C-w>l
+nnoremap <A-l> <C-w>j
+nnoremap <A-p> <C-w>k
 
 " Ctrl + c : copia para o registrador y:
-vnoremap <C-c> "*y
+vnoremap <C-c> "*+
 
 " movimentação entre buffers:
 nnoremap <A-j> :bp<return>
 nnoremap <A-k> :bn<return>
 
+" sair do modo terminal:
+tnoremap <A-e> <C-\><C-n>
