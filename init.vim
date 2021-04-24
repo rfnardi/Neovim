@@ -4,10 +4,12 @@ Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cr
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
-"Plug 'pappasam/coc-jedi', { 'do': 'yarn install --frozen-lockfile && yarn build' }
+Plug 'davidhalter/jedi-vim'
 Plug 'lervag/vimtex'
+Plug 'plasticboy/vim-markdown'
 Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
+Plug 'tpope/vim-commentary'
 call plug#end()
 
 
@@ -53,6 +55,8 @@ nmap <silent> gy <Plug>(coc-type-definition)
 nmap <silent> gi <Plug>(coc-implementation)
 nmap <silent> gr <Plug>(coc-references)
 
+let g:tex_flavor = 'latex'
+
 set nocompatible 	        " disable compatibility to old-time vi
 set showmatch 		        " show matching brackets
 "set ignorecase 		        " case insensitive matching
@@ -92,11 +96,11 @@ vnoremap <A-{> di{}<esc>hp
 vnoremap <A-[> di[]<esc>hp
 
 "completamento de brackets:
-inoremap ( ( )<esc>hi
-inoremap { { }<esc>hi
-inoremap [ [ ]<esc>hi
-inoremap " " "<esc>hi
-inoremap ' ' '<esc>hi
+inoremap ( ()<esc>i
+inoremap { {}<esc>i
+inoremap [ []<esc>i
+inoremap " ""<esc>i
+inoremap ' ''<esc>i
 "***************************************************
 
 " insere uma linha vazia abaixo da atual e volta para o modo normal:
