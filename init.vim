@@ -9,7 +9,7 @@ Plug 'lervag/vimtex'
 Plug 'plasticboy/vim-markdown'
 Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
-Plug 'tpope/vim-commentary'
+Plug 'tpome/vim-commentary'					" gcc comenta a linha , gc comenta seleção no modo visual, etc 
 call plug#end()
 
 
@@ -127,7 +127,7 @@ nnoremap <A-l> <C-w>j
 nnoremap <A-p> <C-w>k
 
 " Ctrl + c : copia para o registrador y:
-vnoremap <C-c> "*+
+vnoremap <C-c> "+y
 
 " movimentação entre buffers:
 nnoremap <A-j> :bp<return>
