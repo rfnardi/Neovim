@@ -112,12 +112,12 @@ nnoremap <A-;> A;<esc>
 nnoremap <tab> i<tab>
 nnoremap <A-s> :%s/
 nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
-nnoremap <A-[> :NERDTree <esc>
+nnoremap <A-[> :NERDTreeToggle <esc>
 
+" grava as folds para serem carregadas na próxima vez com o arquivo for aberto 
 nnoremap <A-m> :mkview<esc>
-" grava as folds para serem carregadas na próxima vez com o arquivo for aberto
 
-" carrega as folds gravadas com o :makeview
+" carrega as folds gravadas com o :makeview 
 nnoremap <A-l> :loadview<esc>
 
 " mudança entre janelas
@@ -126,7 +126,7 @@ nnoremap <A-.> <C-w>l
 nnoremap <A-l> <C-w>j
 nnoremap <A-p> <C-w>k
 
-" Ctrl + c : copia para o registrador y:
+" Ctrl + c : copia para o registrador +:
 vnoremap <C-c> "+y
 
 " movimentação entre buffers:
