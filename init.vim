@@ -4,12 +4,14 @@ Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cr
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
-Plug 'davidhalter/jedi-vim'
+"Plug 'davidhalter/jedi-vim'
 Plug 'lervag/vimtex'
 Plug 'plasticboy/vim-markdown'
 Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
-Plug 'tpome/vim-commentary'					" gcc comenta a linha , gc comenta seleção no modo visual, etc 
+Plug 'tpope/vim-commentary'					" gcc comenta a linha , gc comenta seleção no modo visual, etc 
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
+Plug 'junegunn/fzf.vim'
 call plug#end()
 
 
@@ -29,8 +31,8 @@ call plug#end()
 colorscheme gruvbox
 set background=dark
 
-autocmd vimenter * NERDTree
-let g:NERDTreeGitStatusWithFlags = 1
+" autocmd vimenter * NERDTree
+" let g:NERDTreeGitStatusWithFlags = 1
 
 :set noswapfile
 set hidden                  " permite abrir outro buffer mesmo sem salvar o arquivo atual
@@ -118,13 +120,13 @@ nnoremap <A-[> :NERDTreeToggle <esc>
 nnoremap <A-m> :mkview<esc>
 
 " carrega as folds gravadas com o :makeview 
-nnoremap <A-l> :loadview<esc>
+nnoremap <A-l> :silent! loadview<esc>
 
 " mudança entre janelas
 nnoremap <A-,> <C-w>h
 nnoremap <A-.> <C-w>l
-nnoremap <A-l> <C-w>j
-nnoremap <A-p> <C-w>k
+nnoremap <C-l> <C-w>j
+nnoremap <C-p> <C-w>k
 
 " Ctrl + c : copia para o registrador +:
 vnoremap <C-c> "+y
@@ -135,3 +137,6 @@ nnoremap <A-k> :bn<return>
 
 " sair do modo terminal:
 tnoremap <A-e> <C-\><C-n>
+
+" fuzzy finder:
+nnoremap <A-f> :Files<CR>
