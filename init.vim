@@ -108,6 +108,14 @@ inoremap ' ''<esc>i
 " insere uma linha vazia abaixo da atual e volta para o modo normal:
 nnoremap <return> o<esc>
 
+" yanks till the end of line:
+nnoremap Y y$
+
+" keeping it centered while moving around between matches:
+nnoremap n nzzza
+nnoremap N Nzzza
+nnoremap J mzJ`z
+
 "vai pro final da linha e digita ';'
 nnoremap <A-;> A;<esc>
 
