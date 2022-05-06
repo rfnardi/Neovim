@@ -10,6 +10,6 @@
 :CocInstall coc-tsserver
 :CocInstall coc-snippets
 :CocInstall coc-yank
-:CocInstall coc-highligh
+:CocInstall coc-highlight
 :CocInstall coc-vimlsp
 :CocInstall coc-calc
