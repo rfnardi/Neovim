@@ -176,3 +176,7 @@ tnoremap <A-e> <C-\><C-n>
 
 " fuzzy finder:
 nnoremap <A-f> :Files<CR>
+
+" iniciando tikz picture com pacote tkz:
+cnoremap tkzinit normal i\tkzInit[xmin=,xmax=,ymin=,ymax=<esc>$o\tkzDrawX[noticks]<esc>yypfXrY<esc>
+
