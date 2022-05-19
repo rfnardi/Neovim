@@ -178,5 +178,7 @@ tnoremap <A-e> <C-\><C-n>
 nnoremap <A-f> :Files<CR>
 
 " iniciando tikz picture com pacote tkz:
-cnoremap tkzinit normal i\tkzInit[xmin=,xmax=,ymin=,ymax=<esc>$o\tkzDrawX[noticks]<esc>yypfXrY<esc>
+command Tkzinit normal i\tkzInit[xmin=,xmax=,ymin=,ymax=<esc>$o\tkzDrawX[noticks]<esc>yypfXrY<esc>
 
+" iniciando arquivo tex:
+command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\usepackage[T1]<esc>x$a{fontenc<esc>yyp0f[lciwutf8<esc>f{lci{inputenc<esc>o\input{../../preambulo_basics.tex<esc>yyp02f/lciwpreambulo_tikz_stuff<esc>yyp02f/lciwpreambulo_my_envrmts<esc><return>
