@@ -1,10 +1,15 @@
+"---------------------------------------------
+"				Plugins
+"---------------------------------------------
+
 call plug#begin()
 Plug 'morhetz/gruvbox'                      " aparência/esquemas de cores
 Plug 'terryma/vim-multiple-cursors'         " <C-n> procura palavras iguais e cria multiplos cursores
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
-Plug 'davidhalter/jedi-vim'
+" Plug 'pappasam/coc-jedi', { 'do': 'yarn install --frozen-lockfile && yarn build', 'branch': 'main' }
+
 Plug 'lervag/vimtex'
 Plug 'plasticboy/vim-markdown'
 Plug 'tpope/vim-surround'
@@ -29,6 +34,13 @@ call plug#end()
 ":CocInstall coc-sh
 ":CocInstall coc-tsserver
 ":CocInstall coc-snippets
+":CocInstall coc-diagnostic
+":CocInstall coc-jedi
+
+
+"---------------------------------------------
+"				Settings
+"---------------------------------------------
 
 colorscheme gruvbox
 set background=dark
@@ -36,7 +48,7 @@ set background=dark
 " autocmd vimenter * NERDTree
 " let g:NERDTreeGitStatusWithFlags = 1
 
-:set noswapfile
+set noswapfile
 set hidden                  " permite abrir outro buffer mesmo sem salvar o arquivo atual
 
 "set relativenumber
@@ -44,44 +56,36 @@ set hidden                  " permite abrir outro buffer mesmo sem salvar o arqu
 
 :set number relativenumber
 
-:augroup numbertoggle
-:  autocmd!
-:  autocmd BufEnter,FocusGained,InsertLeave * set relativenumber
-:  autocmd BufLeave,FocusLost,InsertEnter   * set norelativenumber
-:augroup END
-
-":verbose imap <tab> # to make sure keymap for coc-nvim take effect
-
-" GoTo code navigation:
-" Ctrl + o goes back
-nmap <silent> gd <Plug>(coc-definition)
-nmap <silent> gy <Plug>(coc-type-definition)
-nmap <silent> gi <Plug>(coc-implementation)
-nmap <silent> gr <Plug>(coc-references)
-
-let g:tex_flavor = 'latex'
 
 set nocompatible 	        " disable compatibility to old-time vi
 set showmatch 		        " show matching brackets
 "set ignorecase 		        " case insensitive matching
 set mouse=a                 " integração com o mouse para seleção     
 set hlsearch                " highlight search results
-set tabstop=4               " number of columns occupied by a tab character
+set tabstop=2               " number of columns occupied by a tab character
 set softtabstop=4           " see multiple spaces as tabstops so <BS> does the right thing
-"set expandtab               " converts tabs to white space
+set expandtab               " converts tabs to white space
 set shiftwidth=4            " width for autoindento:
 set autoindent              " indent a new line the same amount as the line just typed
 set wildmode=longest,list   " get bash-like tab completions
 set splitright              " abre uma split vertical sempre à direita do buffer atual
 
+set exrc
+set shiftwidth
+set list
+set listchars=tab:>\ ,trail:.		" mostra caracteres ocultos (tab, space, etc)
 
 set statusline=%<%f\ %h%m%r%{FugitiveStatusline()}%=%-14.(%l,%c%V%)\ %P
+
+set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas as ocorrências de old no arquivo. tb funciona 
+                                    " para a substituição ':%s/old/new '
 
 filetype plugin indent on   " allows auto-indenting depending on file type
 syntax on                   " syntax highlighting
 
 "------------------------- vimtex configurations -----------------------
 
+let g:tex_flavor = 'latex'
 " syntax enable " to use vimtex properly (?)
 " Viewer options: One may configure the viewer either by specifying a built-in
 " viewer method:
@@ -103,11 +107,37 @@ let g:vimtex_compiler_method = 'latexmk'
 " following line. The default is usually fine and is the symbol "\".
 let maplocalleader = ","
 
+" iniciando tikz picture com pacote tkz:
+command Tkzinit normal i\tkzInit[xmin=,xmax=,ymin=,ymax=<esc>$o\tkzDrawX[noticks]<esc>yypfXrY<esc>
+
+" iniciando arquivo tex:
+command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\usepackage[T1]<esc>x$a{fontenc<esc>yyp0f[lciwutf8<esc>f{lci{inputenc<esc>o\input{../../preambulo_basics.tex<esc>yyp02f/lciwpreambulo_tikz_stuff<esc>yyp02f/lciwpreambulo_my_envrmts<esc><return>
+
 "------------------------- vimtex configurations -----------------------
 
 
-set inccommand=split        " a busca com ' :%s/old ' cria um preview de todas as ocorrências de old no arquivo. tb funciona 
-                                    " para a substituição ':%s/old/new '
+
+
+"---------------------------------------------
+"				Key-Mappings
+"---------------------------------------------
+
+:augroup numbertoggle
+:  autocmd!
+:  autocmd BufEnter,FocusGained,InsertLeave * set relativenumber
+:  autocmd BufLeave,FocusLost,InsertEnter   * set norelativenumber
+:augroup END
+
+":verbose imap <tab> # to make sure keymap for coc-nvim take effect
+
+" GoTo code navigation:
+" Ctrl + o goes back
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
+
+
 
 "let mapleader="\<space>"
 "
@@ -147,6 +177,7 @@ nnoremap J mzJ`z
 "vai pro final da linha e digita ';'
 nnoremap <A-;> A;<esc>
 
+nnoremap <A-b> :Buffers<cr>
 nnoremap <tab> i<tab>
 nnoremap <A-s> :%s/
 nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
@@ -177,8 +208,3 @@ tnoremap <A-e> <C-\><C-n>
 " fuzzy finder:
 nnoremap <A-f> :Files<CR>
 
-" iniciando tikz picture com pacote tkz:
-command Tkzinit normal i\tkzInit[xmin=,xmax=,ymin=,ymax=<esc>$o\tkzDrawX[noticks]<esc>yypfXrY<esc>
-
-" iniciando arquivo tex:
-command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\usepackage[T1]<esc>x$a{fontenc<esc>yyp0f[lciwutf8<esc>f{lci{inputenc<esc>o\input{../../preambulo_basics.tex<esc>yyp02f/lciwpreambulo_tikz_stuff<esc>yyp02f/lciwpreambulo_my_envrmts<esc><return>
