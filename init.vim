@@ -45,6 +45,11 @@ call plug#end()
 colorscheme gruvbox
 set background=dark
 
+" augroup folding
+"   au BufReadPre * setlocal foldmethod=indent
+"   au BufWinEnter * if &fdm == 'indent' | setlocal foldmethod=manual | endif
+" augroup END
+
 " autocmd vimenter * NERDTree
 " let g:NERDTreeGitStatusWithFlags = 1
 
@@ -63,15 +68,14 @@ set showmatch 		        " show matching brackets
 set mouse=a                 " integração com o mouse para seleção     
 set hlsearch                " highlight search results
 set tabstop=2               " number of columns occupied by a tab character
-set softtabstop=4           " see multiple spaces as tabstops so <BS> does the right thing
+set softtabstop=2           " see multiple spaces as tabstops so <BS> does the right thing
 set expandtab               " converts tabs to white space
-set shiftwidth=4            " width for autoindento:
+set shiftwidth=2            " width for autoindento:
 set autoindent              " indent a new line the same amount as the line just typed
 set wildmode=longest,list   " get bash-like tab completions
 set splitright              " abre uma split vertical sempre à direita do buffer atual
 
 set exrc
-set shiftwidth
 set list
 set listchars=tab:>\ ,trail:.		" mostra caracteres ocultos (tab, space, etc)
 
@@ -108,7 +112,7 @@ let g:vimtex_compiler_method = 'latexmk'
 let maplocalleader = ","
 
 " iniciando tikz picture com pacote tkz:
-command Tkzinit normal i\tkzInit[xmin=,xmax=,ymin=,ymax=<esc>$o\tkzDrawX[noticks]<esc>yypfXrY<esc>
+command Tkzinit normal i\tkzInit[xmin=0,xmax=10,ymin=0,ymax=6<esc>$o\tkzDrawX[noticks<esc>yypfXrY<esc>
 
 " iniciando arquivo tex:
 command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\usepackage[T1]<esc>x$a{fontenc<esc>yyp0f[lciwutf8<esc>f{lci{inputenc<esc>o\input{../../preambulo_basics.tex<esc>yyp02f/lciwpreambulo_tikz_stuff<esc>yyp02f/lciwpreambulo_my_envrmts<esc><return>
