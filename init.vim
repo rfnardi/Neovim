@@ -10,11 +10,13 @@ Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
 " Plug 'pappasam/coc-jedi', { 'do': 'yarn install --frozen-lockfile && yarn build', 'branch': 'main' }
 
+Plug 'https://github.com/z3t0/arduvim'
+Plug 'stevearc/vim-arduino'
 Plug 'lervag/vimtex'
 Plug 'plasticboy/vim-markdown'
 Plug 'tpope/vim-surround'
 Plug 'honza/vim-snippets'
-Plug 'tpope/vim-commentary'					" gcc comenta a linha , gc comenta seleção no modo visual, etc 
+Plug 'tpope/vim-commentary' 				" gcc comenta a linha , gc comenta seleção no modo visual, etc 
 Plug 'eslint/eslint'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
@@ -69,7 +71,7 @@ set mouse=a                 " integração com o mouse para seleção
 set hlsearch                " highlight search results
 set tabstop=2               " number of columns occupied by a tab character
 set softtabstop=2           " see multiple spaces as tabstops so <BS> does the right thing
-set expandtab               " converts tabs to white space
+" set expandtab               " converts tabs to white space
 set shiftwidth=2            " width for autoindento:
 set autoindent              " indent a new line the same amount as the line just typed
 set wildmode=longest,list   " get bash-like tab completions
@@ -115,7 +117,7 @@ let maplocalleader = ","
 command Tkzinit normal i\tkzInit[xmin=0,xmax=10,ymin=0,ymax=6<esc>$o\tkzDrawX[noticks<esc>yypfXrY<esc>
 
 " iniciando arquivo tex:
-command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\usepackage[T1]<esc>x$a{fontenc<esc>yyp0f[lciwutf8<esc>f{lci{inputenc<esc>o\input{../../preambulo_basics.tex<esc>yyp02f/lciwpreambulo_tikz_stuff<esc>yyp02f/lciwpreambulo_my_envrmts<esc><return>
+command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\usepackage[T1]<esc>x$a{fontenc<esc>yyp0f[lciwutf8<esc>f{lci{inputenc<esc>o\input{../../../preamb_files/preambulo_basics.tex<esc>yyp04f/lciwpreambulo_tikz_stuff<esc>yyp04f/lciwpreambulo_my_envrmts<esc><return>
 
 "------------------------- vimtex configurations -----------------------
 
