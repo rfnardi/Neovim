@@ -1,5 +1,5 @@
 "---------------------------------------------
-"				Plugins
+" 				Plugins
 "---------------------------------------------
 
 call plug#begin()
@@ -41,7 +41,7 @@ call plug#end()
 
 
 "---------------------------------------------
-"				Settings
+" 				Settings
 "---------------------------------------------
 
 colorscheme gruvbox
@@ -125,7 +125,7 @@ command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\use
 
 
 "---------------------------------------------
-"				Key-Mappings
+" 				Key-Mappings
 "---------------------------------------------
 
 :augroup numbertoggle
