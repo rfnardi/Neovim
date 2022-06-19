@@ -128,6 +128,9 @@ command Preambulo normal i\documentclass[a4paper,12pt<esc>$a{article}<esc>xo\use
 " 				Key-Mappings
 "---------------------------------------------
 
+".tmux.conf
+nnoremap <A-t> :e ~/.tmux.conf<esc>
+
 :augroup numbertoggle
 :  autocmd!
 :  autocmd BufEnter,FocusGained,InsertLeave * set relativenumber
@@ -186,7 +189,7 @@ nnoremap <A-;> A;<esc>
 nnoremap <A-b> :Buffers<cr>
 nnoremap <tab> i<tab>
 nnoremap <A-s> :%s/
-nnoremap <A-ç> :vs ~/.config/nvim/init.vim <esc>
+nnoremap <A-ç> :e ~/.config/nvim/init.vim <esc>
 nnoremap <A-[> :NERDTreeToggle <esc>
 
 " grava as folds para serem carregadas na próxima vez com o arquivo for aberto 
