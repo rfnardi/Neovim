@@ -44,6 +44,10 @@ call plug#end()
 " 				Settings
 "---------------------------------------------
 
+
+" seleção na lista do popupmenu com enter:
+:inoremap <expr> <CR> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
+
 colorscheme gruvbox
 set background=dark
 
