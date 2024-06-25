@@ -1,5 +1,6 @@
 {
   "clangd.path": "~/.config/coc/extensions/coc-clangd-data/install/15.0.6/clangd_15.0.6/bin/clangd",
+  "pyright.enable": true,
   "jedi.enable": true,
   "jedi.startupMessage": false,
   "jedi.markupKindPreferred": "plaintext",
@@ -30,5 +31,6 @@
     ".venv",
     "__pycache__",
     "venv"
-  ]
+  ],
+  "snippets.ultisnips.pythonPrompt": false
 }

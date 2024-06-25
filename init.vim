@@ -32,7 +32,7 @@ call plug#end()
 ":CocInstall coc-clangd
 ":CocInstall coc-cmake
 ":CocInstall coc-json
-":CocInstall coc-python
+":CocInstall coc-pyright
 ":CocInstall coc-sh
 ":CocInstall coc-tsserver
 ":CocInstall coc-snippets
@@ -44,6 +44,8 @@ call plug#end()
 " 				Settings
 "---------------------------------------------
 
+" Sets fish as the shell:
+:set shell=/bin/fish 
 
 " seleção na lista do popupmenu com enter:
 :inoremap <expr> <CR> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
@@ -221,3 +223,5 @@ tnoremap <A-e> <C-\><C-n>
 " fuzzy finder:
 nnoremap <A-f> :Files<CR>
 
+inoremap <A-q> \
+inoremap <A-w> \|
