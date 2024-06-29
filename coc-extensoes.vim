@@ -13,3 +13,5 @@
 :CocInstall coc-highlight
 :CocInstall coc-vimlsp
 :CocInstall coc-calc
+:CocInstall coc-jedi
+:CocInstall coc-pyright

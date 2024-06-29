@@ -24,20 +24,8 @@ Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
 call plug#end()
 
 
-" ao reinstalar o nvim, rodar estes comandos para habilitar o intelisense das
-" linguagens do coc:
-" 
-":CocInstall coc-texlab
-":CocInstall coc-html
-":CocInstall coc-clangd
-":CocInstall coc-cmake
-":CocInstall coc-json
-":CocInstall coc-pyright
-":CocInstall coc-sh
-":CocInstall coc-tsserver
-":CocInstall coc-snippets
-":CocInstall coc-diagnostic
-":CocInstall coc-jedi
+" ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
+" linguagens do coc: :source ./coc-extensoes.vim
 
 
 "---------------------------------------------
