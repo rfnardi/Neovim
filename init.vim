@@ -9,7 +9,8 @@ Plug 'neoclide/coc.nvim', {'branch': 'release'}
 Plug 'preservim/nerdtree'
 Plug 'tpope/vim-fugitive'                   " integração com o git 
 " Plug 'pappasam/coc-jedi', { 'do': 'yarn install --frozen-lockfile && yarn build', 'branch': 'main' }
-
+"
+Plug 'dag/vim-fish'
 Plug 'https://github.com/z3t0/arduvim'
 Plug 'stevearc/vim-arduino'
 Plug 'lervag/vimtex'
