@@ -49,6 +49,9 @@ set background=dark
 
 " autocmd vimenter * NERDTree
 " let g:NERDTreeGitStatusWithFlags = 1
+"
+let g:loaded_ruby_provider = 0 " não carrega o provedor de ruby (não uso isso)
+let g:loaded_perl_provider = 0 " não carrega o provedor perl
 
 set noswapfile
 set hidden                  " permite abrir outro buffer mesmo sem salvar o arquivo atual
