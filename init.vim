@@ -24,6 +24,8 @@ Plug 'junegunn/fzf.vim'
 Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
 call plug#end()
 
+lua require("ollama").OllamaVisual()
+
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim
