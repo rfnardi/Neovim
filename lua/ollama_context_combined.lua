@@ -34,6 +34,26 @@ local function find_last_user_line(buf)
   return nil
 end
 
+function M.ContextChatVisual(line1, line2)
+    local buf = api.nvim_get_current_buf()
+    local lines = api.nvim_buf_get_lines(buf, line1 - 1, line2, false)
+    local selection_text = table.concat(lines, "\n")
+
+    M.ContextChat(nil, selection_text)
+end
+
+function M.ContextChatRange(line1, line2)
+  local buf = api.nvim_get_current_buf()
+  local start_line = line1 and tonumber(line1) or 1
+  local end_line   = line2 and tonumber(line2) or api.nvim_buf_line_count(buf)
+
+  local lines = api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+  local text = table.concat(lines, "\n")
+
+  M.ContextChat(nil, text)
+end
+
+
 -- monta o contexto da pasta do buffer atual
 local function read_folder_context()
   local cur_file = api.nvim_buf_get_name(0)
@@ -67,13 +87,16 @@ local function read_folder_context()
 end
 
 -- Abre popup interativo com contexto da pasta
-function M.ContextChat(mode)
-  if mode == "folder" then
+function M.ContextChat(mode, predefined_text)
+	if predefined_text ~= nil then
+    M.context_text = predefined_text
+	elseif mode == "folder" then
     M.context_text = read_folder_context()
   else
     -- pega apenas buffer atual
     local cur_buf = api.nvim_get_current_buf()
-    local lines = api.nvim_buf_get_lines(cur_buf, 0, -1, false)
+		local line_count = api.nvim_buf_line_count(cur_buf)  -- <--- garantir todo o buffer
+    local lines = api.nvim_buf_get_lines(cur_buf, 0, line_count, false)
     M.context_text = table.concat(lines, "\n")
   end
 
