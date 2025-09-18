@@ -26,8 +26,15 @@ call plug#end()
 
 lua require("ollama").OllamaVisual()
 
-lua require('ollama_context')
-command! Context lua require('ollama_context').ContextChat()
+" lua require('ollama_context')
+" command! Context lua require('ollama_context').ContextChat()
+
+" Carrega o módulo sem abrir popup
+lua require('ollama_context_combined')
+
+" Cria comandos customizados
+:command! Context lua require('ollama_context_combined').ContextChat()
+:command! ContextFolder lua require('ollama_context_combined').ContextChat('folder')
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim
