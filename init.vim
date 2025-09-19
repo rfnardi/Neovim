@@ -24,18 +24,9 @@ Plug 'junegunn/fzf.vim'
 Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
 call plug#end()
 
-lua require("ollama").OllamaVisual()
-
-" lua require('ollama_context')
-" command! Context lua require('ollama_context').ContextChat()
 
 " Carrega o módulo sem abrir popup
 lua require('ollama_context')
-
-" Cria comandos customizados
-" :command! Context lua require('ollama_context_combined').ContextChat()
-" :command! ContextFolder lua require('ollama_context').ContextChatFull('folder')
-" :command! -range Context lua require('ollama_context').ContextChatRange(<line1>, <line2>)
 
 " Comando unificado
 command! -range Context lua require('ollama_context').ContextChatHandler(<line1>, <line2>)
