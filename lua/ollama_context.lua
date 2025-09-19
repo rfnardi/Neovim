@@ -32,6 +32,7 @@ local function find_last_user_line(buf)
     return nil
 end
 
+
 -- ======================================================
 -- Obter conteúdo do buffer ou seleção
 -- ======================================================
@@ -67,7 +68,7 @@ local function read_folder_context()
     -- Seção ls
     table.insert(context_lines, "=== Arquivos na pasta " .. dir .. ":")
     local files = vim.fn.readdir(dir)
-    table.insert(context_lines, table.concat(files, "\n "))
+    table.insert(context_lines, table.concat(files, "\n"))
     table.insert(context_lines, "")
 
     -- Seção cat
@@ -91,49 +92,149 @@ end
 -- Abre popup interativo
 -- ======================================================
 function M.open_popup(text)
-    M.context_text = text
-    local buf = api.nvim_create_buf(false, true)
-    M.popup_buf = buf
+	M.context_text = text
+	local buf = api.nvim_create_buf(false, true)
+	M.popup_buf = buf
 
-    local width = math.floor(vim.o.columns * 0.7)
-    local height = math.floor(vim.o.lines * 0.7)
-    local row = math.floor((vim.o.lines - height) / 2)
-    local col = math.floor((vim.o.columns - width) / 2)
+	local width = math.floor(vim.o.columns * 0.7)
+	local height = math.floor(vim.o.lines * 0.7)
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
 
-    M.popup_win = api.nvim_open_win(buf, true, {
-        relative = "editor",
-        width = width,
-        height = height,
-        row = row,
-        col = col,
-        style = "minimal",
-        border = "rounded",
-    })
+	M.popup_win = api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+	})
 
-    local lines = split_lines(text)
-    table.insert(lines, "")
-    table.insert(lines, "## Nardi >> ")
-    api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
-    vim.cmd("startinsert")
+	local lines = split_lines(text)
+	table.insert(lines, "")
+	table.insert(lines, "## Nardi >> ")
+	api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
+	vim.cmd("startinsert")
 
-    api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('ollama_context_combined').SendFromPopup()<CR>", { noremap=true, silent=true })
-    api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('ollama_context_combined').SendFromPopup()<CR>", { noremap=true, silent=true })
+	-- Ctrl+S
+	api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('ollama_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+	api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('ollama_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+
+	-- ======================================================
+	-- Highlight das linhas especiais
+	-- ======================================================
+	vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")  -- vermelho/laranja
+	vim.cmd("highlight ContextUserAI gui=bold guifg=#FF6347 guibg=NONE")   -- vermelho claro
+	vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")     -- vermelho (firebrick) para Nardi >>
+	vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")  -- amarelo (darkorange) para buffer atual
+
+	local total_lines = api.nvim_buf_line_count(buf)
+
+	for i = 0, total_lines - 1 do
+		local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+		if line:match("^===") or line:match("^==") then
+			api.nvim_buf_add_highlight(buf, -1, "ContextHeader", i, 0, -1)
+		end
+
+		-- Destacar "## buffer atual ##" em qualquer lugar da linha
+		if line and line:match("## buffer atual ##") then
+			local start_idx, end_idx = line:find("## buffer atual ##")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
+			end
+		end
+
+		if line and line:match("## Nardi >>") then
+			local start_idx, end_idx = line:find("## Nardi >>")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextUser", i, start_idx-1, end_idx)
+			end
+		end
+
+		if line and line:match("## IA >>") then
+			local start_idx, end_idx = line:find("## IA >>")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextUserAI", i, start_idx-1, end_idx)
+			end
+		end
+	end
+
+	-- ======================================================
+	-- Criação manual de folds hierárquicas
+	-- ======================================================
+	--
+	vim.api.nvim_buf_set_option(buf, "foldmethod", "manual")
+	vim.api.nvim_buf_set_option(buf, "foldenable", true)
+	vim.api.nvim_buf_set_option(buf, "foldlevel", 1)
+
+	-- ======================================================
+	-- Nova lógica simplificada para criar folds
+	-- ======================================================
+
+local function create_folds()
+    local buf = M.popup_buf
+    local total_lines = api.nvim_buf_line_count(buf)
+    
+    -- Primeiro, vamos limpar todas as folds existentes
+    vim.cmd('normal! zE')
+    
+    -- Encontra todas as linhas de cabeçalho
+    local headers = {}
+    for i = 0, total_lines - 1 do
+        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+        if line and (line:match("^## Nardi >>") or line:match("^## IA >>") or 
+                   line:match("^===") or line:match("^==")) then
+            table.insert(headers, i)
+        end
+    end
+    
+    -- Ordena por número de linha
+    table.sort(headers)
+    
+    -- Cria folds para o conteúdo após cada cabeçalho
+    for i = 1, #headers do
+        local header_line = headers[i]
+        local fold_start = header_line + 1
+        local fold_end = total_lines - 1
+        
+        -- Encontra o próximo cabeçalho ou usa o final do buffer
+        if i < #headers then
+            fold_end = headers[i + 1] - 1
+        end
+        
+        -- Só cria a fold se houver conteúdo após o cabeçalho
+        if fold_start <= fold_end then
+            vim.api.nvim_buf_call(buf, function()
+                vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
+            end)
+        end
+    end
+    
+    -- Abre todas as folds no nível 1 para garantir que os cabeçalhos estejam visíveis
+    vim.cmd('normal! zM')
+    vim.cmd('normal! G')
+    vim.cmd('normal! zz')
 end
 
--- ======================================================
--- Funções públicas para abrir popup
--- ======================================================
---
-function M.ContextChatFull()
-    local text = M.get_full_buffer()
-    M.open_popup(text)
+	create_folds()
+
 end
 
-function M.ContextChatSelection(start_line, end_line)
-    local text = M.get_selection(start_line, end_line)
-    M.open_popup(text)
-end
+	-- ======================================================
+	-- Funções públicas para abrir popup
+	-- ======================================================
+	--
+	function M.ContextChatFull()
+		local text = M.get_full_buffer()
+		M.open_popup(text)
+	end
+
+	function M.ContextChatSelection(start_line, end_line)
+		local text = M.get_selection(start_line, end_line)
+		M.open_popup(text)
+	end
 
 function M.ContextChatFolder()
     local text = read_folder_context()
@@ -246,4 +347,3 @@ function M.SendFromPopup()
 end
 
 return M
-
