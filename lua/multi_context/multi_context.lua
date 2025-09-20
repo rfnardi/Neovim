@@ -34,7 +34,7 @@ end
 
 -- Função para carregar configurações das APIs
 local function load_api_config()
-    local config_path = vim.fn.expand('~/.config/nvim/ollama_apis.json')
+    local config_path = vim.fn.expand('~/.config/nvim/context_apis.json')
     local file = io.open(config_path, 'r')
     if not file then
         return nil
@@ -47,7 +47,7 @@ end
 -- Função para aplicar highlights
 local function apply_highlights(buf)
     vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")
-    vim.cmd("highlight ContextUserAI gui=bold guifg=#FF6347 guibg=NONE")
+    vim.cmd("highlight ContextUserAI gui=bold guifg=#0000CD guibg=NONE")
     vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")
     vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")
     vim.cmd("highlight ContextUpdateMessages gui=bold guifg=#FFA500 guibg=NONE")
@@ -81,8 +81,8 @@ local function apply_highlights(buf)
             end
         end
 
-        if line and line:match("^## IA >>") then
-            local start_idx, end_idx = line:find("## IA >>")
+        if line and line:match("^## IA .* >>") then
+            local start_idx, end_idx = line:find("## IA .* >>")
             if start_idx then
                 api.nvim_buf_add_highlight(buf, -1, "ContextUserAI", i, start_idx-1, end_idx)
             end
@@ -203,7 +203,7 @@ function M.open_popup(text)
         local headers = {}
         for i = 0, total_lines - 1 do
             local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
-            if line and (line:match("^## Nardi >>") or line:match("^## IA >>") or 
+            if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or 
                        line:match("^===") or line:match("^==")) then
                 table.insert(headers, i)
             end
@@ -369,6 +369,7 @@ function M.SendFromPopup()
     end
 
     -- Função para tentar a próxima API em caso de falha
+		    -- Função para tentar a próxima API em caso de falha
     local function try_apis(api_list, index)
         if index > #api_list then
             vim.notify("Todas as APIs falharam", vim.log.levels.ERROR)
@@ -379,7 +380,7 @@ function M.SendFromPopup()
         make_request(current_api, function(success, result)
             if success then
                 local ok, decoded = pcall(vim.fn.json_decode, result)
-                if not ok or not decoded or not decoded.choices or not decoded.choices[1] then
+                if not ok then
                     vim.notify("Erro ao decodificar JSON:\n" .. result, vim.log.levels.ERROR)
                     if fallback_mode then
                         try_apis(api_list, index + 1)
@@ -387,8 +388,57 @@ function M.SendFromPopup()
                     return
                 end
 
-                local ai_content = decoded.choices[1].message.content or ""
-                ai_content = "## IA >> " .. ai_content
+                local ai_content = ""
+                local response_format = current_api.response_format or "openai"
+                
+                -- Processar resposta de acordo com o formato
+                if response_format == "openai" then
+                    if decoded and decoded.choices and decoded.choices[1] then
+                        ai_content = decoded.choices[1].message.content or ""
+                    else
+                        vim.notify("Resposta da API no formato OpenAI inválida", vim.log.levels.ERROR)
+                        if fallback_mode then
+                            try_apis(api_list, index + 1)
+                        end
+                        return
+                    end
+                elseif response_format == "gemini" then
+                    if decoded and decoded.candidates and decoded.candidates[1] and decoded.candidates[1].content then
+                        ai_content = decoded.candidates[1].content.parts[1].text or ""
+                    else
+                        vim.notify("Resposta da API no formato Gemini inválida", vim.log.levels.ERROR)
+                        if fallback_mode then
+                            try_apis(api_list, index + 1)
+                        end
+                        return
+                    end
+                elseif response_format == "cloudflare" then
+                    if decoded and decoded.result then
+                        ai_content = decoded.result.response or ""
+                    else
+                        vim.notify("Resposta da API no formato Cloudflare inválida", vim.log.levels.ERROR)
+                        if fallback_mode then
+                            try_apis(api_list, index + 1)
+                        end
+                        return
+                    end
+                else
+                    vim.notify("Formato de resposta não suportado: " .. response_format, vim.log.levels.ERROR)
+                    if fallback_mode then
+                        try_apis(api_list, index + 1)
+                    end
+                    return
+                end
+
+                if ai_content == "" then
+                    vim.notify("Resposta vazia da API", vim.log.levels.WARN)
+                    if fallback_mode then
+                        try_apis(api_list, index + 1)
+                    end
+                    return
+                end
+
+                ai_content = "## IA (" .. current_api.model .. ") >> " .. ai_content
                 M.history[#M.history].ai = ai_content
 
                 vim.schedule(function()

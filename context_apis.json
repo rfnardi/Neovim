@@ -1,0 +1,74 @@
+{
+  "default_api": "google_gemini",
+  "fallback_mode": false,
+  "apis": [
+    {
+      "name": "ollama_local",
+      "model": "codellama:7b-instruct",
+      "url": "http://127.0.0.1:11434/v1/chat/completions",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "response_format": "openai"
+    },
+    {
+      "name": "openai",
+      "model": "gpt-3.5-turbo",
+      "url": "https://api.openai.com/v1/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_OPENAI_API_KEY"
+      },
+      "response_format": "openai"
+    },
+    {
+      "name": "google_gemini",
+      "model": "gemini-pro",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=XXXXXXXXXXXXXXXXXX",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "response_format": "gemini"
+    },
+    {
+      "name": "groq",
+      "model": "llama3-8b-8192",
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer SUA_CHAVE_API_GROQ"
+      },
+      "response_format": "openai"
+    },
+    {
+      "name": "deepseek",
+      "model": "deepseek-chat",
+      "url": "https://api.deepseek.com/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer SUA_CHAVE_API_DEEPSEEK"
+      },
+      "response_format": "openai"
+    },
+    {
+      "name": "openrouter",
+      "model": "nous-hermes-2-mixtral-8x7b-dpo:free",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer SUA_CHAVE_API_OPENROUTER"
+      },
+      "response_format": "openai"
+    },
+    {
+      "name": "cloudflare",
+      "model": "@cf/meta/llama-3-8b-instruct",
+      "url": "https://api.cloudflare.com/client/v4/accounts/SEU_ACCOUNT_ID/ai/run/@cf/meta/llama-3-8b-instruct",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer SEU_API_TOKEN_CLOUDFLARE"
+      },
+      "response_format": "cloudflare"
+    }
+  ]
+}
