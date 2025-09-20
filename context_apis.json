@@ -1,5 +1,5 @@
 {
-  "default_api": "google_gemini",
+  "default_api": "ollama_local",
   "fallback_mode": false,
   "apis": [
     {
@@ -9,7 +9,7 @@
       "headers": {
         "Content-Type": "application/json"
       },
-      "response_format": "openai"
+      "api_type": "openai"
     },
     {
       "name": "openai",
@@ -17,58 +17,19 @@
       "url": "https://api.openai.com/v1/chat/completions",
       "headers": {
         "Content-Type": "application/json",
-        "Authorization": "Bearer YOUR_OPENAI_API_KEY"
+        "Authorization": "{API_KEY}"
       },
-      "response_format": "openai"
+      "api_type": "openai"
     },
     {
       "name": "google_gemini",
       "model": "gemini-pro",
-      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=XXXXXXXXXXXXXXXXXX",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "response_format": "gemini"
-    },
-    {
-      "name": "groq",
-      "model": "llama3-8b-8192",
-      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
       "headers": {
         "Content-Type": "application/json",
-        "Authorization": "Bearer SUA_CHAVE_API_GROQ"
+        "X-goog-api-key": "{API_KEY}"
       },
-      "response_format": "openai"
-    },
-    {
-      "name": "deepseek",
-      "model": "deepseek-chat",
-      "url": "https://api.deepseek.com/chat/completions",
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer SUA_CHAVE_API_DEEPSEEK"
-      },
-      "response_format": "openai"
-    },
-    {
-      "name": "openrouter",
-      "model": "nous-hermes-2-mixtral-8x7b-dpo:free",
-      "url": "https://openrouter.ai/api/v1/chat/completions",
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer SUA_CHAVE_API_OPENROUTER"
-      },
-      "response_format": "openai"
-    },
-    {
-      "name": "cloudflare",
-      "model": "@cf/meta/llama-3-8b-instruct",
-      "url": "https://api.cloudflare.com/client/v4/accounts/SEU_ACCOUNT_ID/ai/run/@cf/meta/llama-3-8b-instruct",
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer SEU_API_TOKEN_CLOUDFLARE"
-      },
-      "response_format": "cloudflare"
+      "api_type": "gemini"
     }
   ]
 }

@@ -26,13 +26,13 @@ call plug#end()
 
 
 " Carrega o módulo sem abrir popup
-lua require('ollama_context')
+lua require('multi_context')
 
 " Comando unificado
-command! -range Context lua require('ollama_context').ContextChatHandler(<line1>, <line2>)
+command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
 
 " contexto da pasta
-command! ContextFolder lua require('ollama_context').ContextChatFolder()
+command! ContextFolder lua require('multi_context').ContextChatFolder()
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim
