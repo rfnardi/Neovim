@@ -16,6 +16,7 @@ M.ContextChatFull = commands.ContextChatFull
 M.ContextChatSelection = commands.ContextChatSelection
 M.ContextChatFolder = commands.ContextChatFolder
 M.ContextChatHandler = commands.ContextChatHandler
+M.ContextChatRepo = commands.ContextChatRepo
 
 -- ======================================================
 -- Envio para LLM

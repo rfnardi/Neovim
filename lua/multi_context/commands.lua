@@ -28,4 +28,12 @@ M.ContextChatHandler = function(start_line, end_line)
     end
 end
 
+M.ContextChatRepo = function()
+    local text = utils.read_repo_context()
+    if text == "" then
+        return
+    end
+    popup.open_popup(text, text)
+end
+
 return M
