@@ -25,14 +25,10 @@ Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
 call plug#end()
 
 
-" Carrega o módulo sem abrir popup
+" Multi-Context:
 lua require('multi_context')
-
-" Comando unificado
 command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
-
-" contexto da pasta
-command! ContextFolder lua require('multi_context').ContextChatFolder()
+command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim

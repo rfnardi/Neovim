@@ -1,5 +1,5 @@
 {
-  "default_api": "ollama_local",
+  "default_api": "google_gemini",
   "fallback_mode": false,
   "apis": [
     {
@@ -23,13 +23,53 @@
     },
     {
       "name": "google_gemini",
-      "model": "gemini-pro",
-      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+      "model": "gemini-2.0-flash",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
       "headers": {
         "Content-Type": "application/json",
         "X-goog-api-key": "{API_KEY}"
       },
       "api_type": "gemini"
+    },
+    {
+      "name": "groq",
+      "model": "llama3-8b-8192",
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "{API_KEY}"
+      },
+      "api_type": "openai"
+    },
+    {
+      "name": "deepseek",
+      "model": "deepseek-chat",
+      "url": "https://api.deepseek.com/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "{API_KEY}"
+      },
+      "api_type": "openai"
+    },
+    {
+      "name": "openrouter",
+      "model": "nous-hermes-2-mixtral-8x7b-dpo:free",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "{API_KEY}"
+      },
+      "api_type": "openai"
+    },
+    {
+      "name": "cloudflare",
+      "model": "@cf/meta/llama-3-8b-instruct",
+      "url": "https://api.cloudflare.com/client/v4/accounts/SEU_ACCOUNT_ID/ai/run/@cf/meta/llama-3-8b-instruct",
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "{API_KEY}"
+      },
+      "api_type": "cloudflare"
     }
   ]
 }

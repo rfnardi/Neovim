@@ -46,12 +46,17 @@ function M.SendFromPopup()
 
     table.insert(M.history, { user = user_text, ai = nil })
 
+    -- Obter TODO o conteúdo do popup (contexto + histórico)
+    local full_context = utils.get_popup_content(buf)
+
+    -- Construir mensagens para a API
     local messages = {}
-    table.insert(messages, { role = "system", content = "Context:\n" .. (M.context_text or "") })
-    for _, pair in ipairs(M.history) do
-        table.insert(messages, { role = "user", content = pair.user })
-        if pair.ai then table.insert(messages, { role = "assistant", content = pair.ai }) end
-    end
+    
+    -- Adicionar todo o contexto do popup como mensagem de sistema
+    table.insert(messages, { role = "system", content = full_context })
+    
+    -- Adicionar apenas a última mensagem do usuário (o que foi digitado após ## Nardi >>)
+    table.insert(messages, { role = "user", content = user_text })
 
     -- Carregar configurações das APIs
     local api_config = utils.load_api_config()
@@ -102,7 +107,11 @@ function M.SendFromPopup()
                 vim.schedule(function()
                     local last_line = api.nvim_buf_line_count(buf) - 1
                     local ai_lines = utils.split_lines(ai_content)
+                    
+                    -- Inserir a resposta da IA
                     utils.insert_after(buf, last_line, ai_lines)
+                    
+                    -- Inserir nova linha com ## Nardi >> após a resposta
                     utils.insert_after(buf, -1, { "", "## Nardi >> " })
                     
                     -- Aplicar highlights novamente para incluir as novas linhas

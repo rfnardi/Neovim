@@ -67,15 +67,14 @@ M.gemini = {
         -- Converter mensagens para formato Gemini
         local gemini_messages = {}
         for _, msg in ipairs(messages) do
-            if msg.role == "user" then
-                table.insert(gemini_messages, {
-                    parts = {
-                        {
-                            text = msg.content
-                        }
+            table.insert(gemini_messages, {
+                role = msg.role == "user" and "user" or "model",
+                parts = {
+                    {
+                        text = msg.content
                     }
-                })
-            end
+                }
+            })
         end
 
         local json_payload = vim.fn.json_encode({
@@ -130,10 +129,26 @@ M.gemini = {
     
     parse_response = function(response_text)
         local ok, decoded = pcall(vim.fn.json_decode, response_text)
-        if not ok or not decoded or not decoded.candidates or not decoded.candidates[1] then
-            return nil, "Erro ao decodificar resposta Gemini"
+        if not ok then
+            return nil, "Erro ao decodificar JSON da resposta Gemini"
         end
-        return decoded.candidates[1].content.parts[1].text or "", nil
+        
+        -- Verificar se há erro na resposta
+        if decoded.error then
+            return nil, decoded.error.message or "Erro na API Gemini"
+        end
+        
+        -- Verificar a estrutura da resposta
+        if not decoded.candidates or not decoded.candidates[1] then
+            return nil, "Resposta da Gemini sem candidatos"
+        end
+        
+        local candidate = decoded.candidates[1]
+        if not candidate.content or not candidate.content.parts or not candidate.content.parts[1] then
+            return nil, "Estrutura de candidato inválida na resposta Gemini"
+        end
+        
+        return candidate.content.parts[1].text or "", nil
     end
 }
 

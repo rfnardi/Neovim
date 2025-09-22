@@ -11,6 +11,9 @@ M.split_lines = function(str)
 end
 
 M.insert_after = function(buf, line_idx, lines)
+    if line_idx == -1 then
+        line_idx = api.nvim_buf_line_count(buf) - 1
+    end
     api.nvim_buf_set_lines(buf, line_idx + 1, line_idx + 1, false, lines)
 end
 
@@ -70,6 +73,13 @@ M.apply_highlights = function(buf)
 
         if line and line:match("%[mensagem enviada%]") then
             local start_idx, end_idx = line:find("%[mensagem enviada%]")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
+            end
+        end
+
+        if line and line:match("%[mensagem recebida%]") then
+            local start_idx, end_idx = line:find("%[mensagem recebida%]")
             if start_idx then
                 api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
             end
@@ -138,6 +148,12 @@ M.read_folder_context = function()
         end
     end
     return table.concat(context_lines, "\n")
+end
+
+M.get_popup_content = function(buf)
+    local line_count = api.nvim_buf_line_count(buf)
+    local lines = api.nvim_buf_get_lines(buf, 0, line_count - 1, false)  -- Exclui a última linha (## Nardi >>)
+    return table.concat(lines, "\n")
 end
 
 return M
