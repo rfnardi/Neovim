@@ -159,29 +159,4 @@ function M.SendFromPopup()
 	end
 end
 
--- Função para salvar o estado do popup
-M.save_popup_state = function()
-    if popup.popup_buf and api.nvim_buf_is_valid(popup.popup_buf) then
-        local lines = api.nvim_buf_get_lines(popup.popup_buf, 0, -1, false)
-        local cursor = api.nvim_win_get_cursor(popup.popup_win)
-        M.popup_state = {
-            lines = lines,
-            cursor = cursor
-        }
-    end
-end
-
--- Hook para fechar o popup
-api.nvim_create_autocmd("WinClosed", {
-    pattern = "*", -- Ou um padrão mais específico se necessário
-    callback = function(ev)
-        if ev.data.winid == M.popup_win then
-            M.save_popup_state()
-            M.popup_win = nil
-            M.popup_buf = nil
-        end
-    end,
-    desc = "Salva o estado do popup quando fechado"
-})
-
 return M

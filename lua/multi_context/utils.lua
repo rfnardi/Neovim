@@ -51,10 +51,11 @@ end
 
 M.apply_highlights = function(buf)
 	vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")
-	vim.cmd("highlight ContextUserAI gui=bold guifg=#32CD32 guibg=NONE")
+	vim.cmd("highlight ContextUserAI gui=bold guifg=#008000 guibg=NONE")
 	vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")
 	vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")
 	vim.cmd("highlight ContextUpdateMessages gui=bold guifg=#FFA500 guibg=NONE")
+	vim.cmd("highlight ContextBoldText gui=bold guifg=#FF4500 guibg=NONE")
 
 	local total_lines = api.nvim_buf_line_count(buf)
 
@@ -68,6 +69,13 @@ M.apply_highlights = function(buf)
 			local start_idx, end_idx = line:find("## buffer atual ##")
 			if start_idx then
 				api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
+			end
+		end
+
+		if line and line:match("%*%*.*%*%*") then
+			local start_idx, end_idx = line:find("%*%*.*%*%*")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextBoldText", i, start_idx-1, end_idx)
 			end
 		end
 
@@ -293,55 +301,55 @@ M.read_repo_context = function()
 end
 
 M.get_git_diff = function()
-    -- Verifica se estamos em um repositório git
-    local git_dir = vim.fn.finddir('.git', '.;')
-    if git_dir == '' then
-        return nil, "Não é um repositório git"
-    end
+	-- Verifica se estamos em um repositório git
+	local git_dir = vim.fn.finddir('.git', '.;')
+	if git_dir == '' then
+		return nil, "Não é um repositório git"
+	end
 
-    -- Obtém informações do branch atual
-    local branch_name = vim.fn.system('git branch --show-current'):gsub('%s+', '')
-    if vim.v.shell_error ~= 0 then
-        branch_name = "desconhecido"
-    end
+	-- Obtém informações do branch atual
+	local branch_name = vim.fn.system('git branch --show-current'):gsub('%s+', '')
+	if vim.v.shell_error ~= 0 then
+		branch_name = "desconhecido"
+	end
 
-    -- Executa git status para obter informações resumidas
-    local status_result = vim.fn.system('git status --porcelain')
-    local status_lines = {}
-    for line in status_result:gmatch("[^\r\n]+") do
-        table.insert(status_lines, line)
-    end
+	-- Executa git status para obter informações resumidas
+	local status_result = vim.fn.system('git status --porcelain')
+	local status_lines = {}
+	for line in status_result:gmatch("[^\r\n]+") do
+		table.insert(status_lines, line)
+	end
 
-    -- Executa git diff para obter as mudanças detalhadas
-    local diff_result = vim.fn.system('git diff HEAD')
-    
-    if vim.v.shell_error ~= 0 then
-        return nil, "Erro ao executar git diff"
-    end
+	-- Executa git diff para obter as mudanças detalhadas
+	local diff_result = vim.fn.system('git diff HEAD')
 
-    if diff_result == '' and #status_lines == 0 then
-        return nil, "Nenhuma mudança não commitada encontrada"
-    end
+	if vim.v.shell_error ~= 0 then
+		return nil, "Erro ao executar git diff"
+	end
 
-    local context_text = "=== Git Status (Branch: " .. branch_name .. "):\n"
-    
-    if #status_lines > 0 then
-        context_text = context_text .. "Arquivos modificados:\n"
-        for _, line in ipairs(status_lines) do
-            context_text = context_text .. "  " .. line .. "\n"
-        end
-        context_text = context_text .. "\n"
-    else
-        context_text = context_text .. "Nenhum arquivo modificado\n\n"
-    end
+	if diff_result == '' and #status_lines == 0 then
+		return nil, "Nenhuma mudança não commitada encontrada"
+	end
 
-    if diff_result ~= '' then
-        context_text = context_text .. "=== Git Diff (mudanças detalhadas):\n" .. diff_result
-    else
-        context_text = context_text .. "=== Git Diff: Nenhuma diferença detalhada (arquivos novos ou deletados)"
-    end
+	local context_text = "=== Git Status (Branch: " .. branch_name .. "):\n"
 
-    return context_text, nil
+	if #status_lines > 0 then
+		context_text = context_text .. "Arquivos modificados:\n"
+		for _, line in ipairs(status_lines) do
+			context_text = context_text .. "  " .. line .. "\n"
+		end
+		context_text = context_text .. "\n"
+	else
+		context_text = context_text .. "Nenhum arquivo modificado\n\n"
+	end
+
+	if diff_result ~= '' then
+		context_text = context_text .. "=== Git Diff (mudanças detalhadas):\n" .. diff_result
+	else
+		context_text = context_text .. "=== Git Diff: Nenhuma diferença detalhada (arquivos novos ou deletados)"
+	end
+
+	return context_text, nil
 end
 
 return M
