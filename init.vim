@@ -30,6 +30,8 @@ lua require('multi_context')
 command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
 command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
 command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()
+command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
+
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim

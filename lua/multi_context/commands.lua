@@ -18,6 +18,16 @@ M.ContextChatFolder = function()
     popup.open_popup(text, text)
 end
 
+M.ContextChatGit = function()
+    local diff_text, error_msg = utils.get_git_diff()
+    if error_msg then
+        vim.notify(error_msg, vim.log.levels.WARN)
+        return
+    end
+    
+    popup.open_popup(diff_text, diff_text)
+end
+
 M.ContextChatHandler = function(start_line, end_line)
     if start_line and end_line and tonumber(start_line) and tonumber(end_line) and tonumber(end_line) ~= tonumber(start_line) then
         -- seleção de múltiplas linhas
