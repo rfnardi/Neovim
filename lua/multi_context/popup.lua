@@ -5,6 +5,8 @@ local M = {}
 
 M.popup_buf = nil
 M.popup_win = nil
+M.context_text = nil
+
 
 M.open_popup = function(text, context_text)
 	M.context_text = context_text
@@ -24,16 +26,24 @@ M.open_popup = function(text, context_text)
 		col = col,
 		style = "minimal",
 		border = "rounded",
+		title = "MultiContext - Chat",
+		title_pos = "center",
 	})
+
 
 	local lines = utils.split_lines(text)
 	table.insert(lines, "")
+
+	-- Adicionar informação da API atual
+	local current_api = utils.get_current_api()
+	table.insert(lines, "## API atual: " .. current_api)
+
 	table.insert(lines, "## Nardi >> ")
 	api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
 	vim.cmd("startinsert")
 
-	-- Ctrl+S
+	-- Apenas Ctrl+S para enviar
 	api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
 	api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
 
@@ -90,6 +100,30 @@ M.create_folds = function(buf)
 	vim.cmd('normal! zM')
 	vim.cmd('normal! G')
 	vim.cmd('normal! zz')
+end
+
+M.update_api_display = function()
+	if not M.popup_buf or not api.nvim_buf_is_valid(M.popup_buf) then
+		return false
+	end
+
+	local utils = require('multi_context.utils')
+	local current_api = utils.get_current_api()
+
+	-- Encontrar e atualizar a linha da API
+	local lines = api.nvim_buf_get_lines(M.popup_buf, 0, -1, false)
+	for i, line in ipairs(lines) do
+		if line:match("^## API atual:") then
+			lines[i] = "## API atual: " .. current_api
+			api.nvim_buf_set_lines(M.popup_buf, i-1, i, false, {lines[i]})
+
+			-- Reaplicar highlights
+			utils.apply_highlights(M.popup_buf)
+			return true
+		end
+	end
+
+	return false
 end
 
 return M

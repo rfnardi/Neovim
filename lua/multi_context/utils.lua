@@ -99,6 +99,14 @@ M.apply_highlights = function(buf)
 				api.nvim_buf_add_highlight(buf, -1, "ContextUserAI", i, start_idx-1, end_idx)
 			end
 		end
+ 
+		if line and line:match("^## API atual:") then
+			local start_idx, end_idx = line:find("## API atual:")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
+			end
+		end
+
 	end
 end
 
@@ -350,6 +358,59 @@ M.get_git_diff = function()
 	end
 
 	return context_text, nil
+end
+
+-- Adicione estas funções ao final do utils.lua
+
+M.get_api_names = function()
+    local api_config = M.load_api_config()
+    if not api_config or not api_config.apis then
+        return {}
+    end
+    
+    local api_names = {}
+    for _, api in ipairs(api_config.apis) do
+        table.insert(api_names, api.name)
+    end
+    return api_names
+end
+
+M.set_selected_api = function(api_name)
+    local api_config = M.load_api_config()
+    if not api_config then
+        return false
+    end
+    
+    -- Verifica se a API existe
+    local api_exists = false
+    for _, api in ipairs(api_config.apis) do
+        if api.name == api_name then
+            api_exists = true
+            break
+        end
+    end
+    
+    if api_exists then
+        api_config.default_api = api_name
+        -- Salva a configuração atualizada
+        local config_path = vim.fn.expand('~/.config/nvim/context_apis.json')
+        local file = io.open(config_path, 'w')
+        if file then
+            file:write(vim.fn.json_encode(api_config))
+            file:close()
+            return true
+        end
+    end
+    
+    return false
+end
+
+M.get_current_api = function()
+    local api_config = M.load_api_config()
+    if not api_config then
+        return "Nenhuma API configurada"
+    end
+    return api_config.default_api or "Nenhuma API selecionada"
 end
 
 return M
