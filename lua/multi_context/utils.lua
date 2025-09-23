@@ -50,64 +50,79 @@ M.load_api_keys = function()
 end
 
 M.apply_highlights = function(buf)
-	vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")
-	vim.cmd("highlight ContextUserAI gui=bold guifg=#008000 guibg=NONE")
-	vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")
-	vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")
-	vim.cmd("highlight ContextUpdateMessages gui=bold guifg=#FFA500 guibg=NONE")
-	vim.cmd("highlight ContextBoldText gui=bold guifg=#FF4500 guibg=NONE")
+    -- Verificar se o buffer ainda é válido
+    if not api.nvim_buf_is_valid(buf) then
+        return
+    end
 
-	local total_lines = api.nvim_buf_line_count(buf)
+    -- Aplicar apenas se for o buffer do nosso popup
+    local buf_name = api.nvim_buf_get_name(buf)
+    if buf_name ~= "" then
+        return -- Não é um buffer anônimo (provavelmente é um arquivo real)
+    end
 
-	for i = 0, total_lines - 1 do
-		local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
-		if line:match("^===") or line:match("^==") then
-			api.nvim_buf_add_highlight(buf, -1, "ContextHeader", i, 0, -1)
-		end
+    vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")
+    vim.cmd("highlight ContextUserAI gui=bold guifg=#0000CD guibg=NONE")
+    vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")
+    vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")
+    vim.cmd("highlight ContextUpdateMessages gui=bold guifg=#FFA500 guibg=NONE")
+    vim.cmd("highlight ContextBoldText gui=bold guifg=#FFA500 guibg=NONE")
+    vim.cmd("highlight ContextApiInfo gui=bold guifg=#FFA500 guibg=NONE")
 
-		if line and line:match("## buffer atual ##") then
-			local start_idx, end_idx = line:find("## buffer atual ##")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
-			end
-		end
+    local total_lines = api.nvim_buf_line_count(buf)
 
-		if line and line:match("%*%*.*%*%*") then
-			local start_idx, end_idx = line:find("%*%*.*%*%*")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextBoldText", i, start_idx-1, end_idx)
-			end
-		end
+    for i = 0, total_lines - 1 do
+        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+        if not line then goto continue end
 
-		if line and line:match("%[mensagem enviada%]") then
-			local start_idx, end_idx = line:find("%[mensagem enviada%]")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
-			end
-		end
+        if line:match("^===") or line:match("^==") then
+            api.nvim_buf_add_highlight(buf, -1, "ContextHeader", i, 0, -1)
+        end
 
-		if line and line:match("^## Nardi >>") then
-			local start_idx, end_idx = line:find("## Nardi >>")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextUser", i, start_idx-1, end_idx)
-			end
-		end
+        if line:match("## buffer atual ##") then
+            local start_idx, end_idx = line:find("## buffer atual ##")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
+            end
+        end
 
-		if line and line:match("^## IA .* >>") then
-			local start_idx, end_idx = line:find("## IA .* >>")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextUserAI", i, start_idx-1, end_idx)
-			end
-		end
- 
-		if line and line:match("^## API atual:") then
-			local start_idx, end_idx = line:find("## API atual:")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
-			end
-		end
+        if line:match("%[mensagem enviada%]") then
+            local start_idx, end_idx = line:find("%[mensagem enviada%]")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
+            end
+        end
 
-	end
+        if line:match("%*%*.*%*%*") then
+            local start_idx, end_idx = line:find("%*%*.*%*%*")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextBoldText", i, start_idx-1, end_idx)
+            end
+        end
+
+        if line:match("^## Nardi >>") then
+            local start_idx, end_idx = line:find("## Nardi >>")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextUser", i, start_idx-1, end_idx)
+            end
+        end
+
+        if line:match("^## IA .* >>") then
+            local start_idx, end_idx = line:find("## IA .* >>")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextUserAI", i, start_idx-1, end_idx)
+            end
+        end
+
+        if line:match("^## API atual:") then
+            local start_idx, end_idx = line:find("## API atual:")
+            if start_idx then
+                api.nvim_buf_add_highlight(buf, -1, "ContextApiInfo", i, start_idx-1, end_idx)
+            end
+        end
+
+        ::continue::
+    end
 end
 
 M.get_full_buffer = function()

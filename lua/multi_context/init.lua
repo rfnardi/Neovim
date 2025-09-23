@@ -115,8 +115,9 @@ function M.SendFromPopup()
 					-- Inserir a resposta da IA
 					utils.insert_after(buf, last_line, ai_lines)
 
-					-- Inserir nova linha com ## Nardi >> após a resposta
-					utils.insert_after(buf, -1, { "", "## Nardi >> " })
+					-- Inserir a linha da API atual e o novo prompt
+					local current_api_name = current_api and current_api.name or "API desconhecida"
+					utils.insert_after(buf, -1, { "## API atual: " .. current_api_name, "## Nardi >> " })
 
 					-- Aplicar highlights novamente para incluir as novas linhas
 					utils.apply_highlights(buf)
@@ -124,8 +125,8 @@ function M.SendFromPopup()
 					if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
 						api.nvim_win_set_cursor(popup.popup_win, { api.nvim_buf_line_count(buf), #"## Nardi >> " })
 					end
-					vim.cmd("startinsert")
-					vim.notify("mensagem recebida de " .. current_api.name, vim.log.levels.INFO)
+					vim.cmd("normal! zz")
+					vim.notify("mensagem recebida de " .. (current_api and current_api.name or "API desconhecida"), vim.log.levels.INFO)
 				end)
 			else
 				vim.notify("API " .. current_api.name .. " falhou: " .. result, vim.log.levels.WARN)

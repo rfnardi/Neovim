@@ -37,11 +37,11 @@ M.open_popup = function(text, context_text)
 	-- Adicionar informação da API atual
 	local current_api = utils.get_current_api()
 	table.insert(lines, "## API atual: " .. current_api)
-
 	table.insert(lines, "## Nardi >> ")
+
 	api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 	api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
-	vim.cmd("startinsert")
+	vim.cmd('normal! zz')
 
 	-- Apenas Ctrl+S para enviar
 	api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
@@ -59,47 +59,59 @@ M.open_popup = function(text, context_text)
 end
 
 M.create_folds = function(buf)
-	local total_lines = api.nvim_buf_line_count(buf)
-
-	-- Primeiro, vamos limpar todas as folds existentes
-	vim.cmd('normal! zE')
-
-	-- Encontra todas as linhas de cabeçalho
-	local headers = {}
-	for i = 0, total_lines - 1 do
-		local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
-		if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or 
-			line:match("^===") or line:match("^==")) then
-			table.insert(headers, i)
-		end
-	end
-
-	-- Ordena por número de linha
-	table.sort(headers)
-
-	-- Cria folds para o conteúdo após cada cabeçalho
-	for i = 1, #headers do
-		local header_line = headers[i]
-		local fold_start = header_line + 1
-		local fold_end = total_lines - 1
-
-		-- Encontra o próximo cabeçalho ou usa o final do buffer
-		if i < #headers then
-			fold_end = headers[i + 1] - 1
-		end
-
-		-- Só cria a fold se houver conteúdo após o cabeçalho
-		if fold_start <= fold_end then
-			vim.api.nvim_buf_call(buf, function()
-				vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
-			end)
-		end
-	end
-
-	-- Fecha todas as folds
-	vim.cmd('normal! zM')
-	vim.cmd('normal! G')
-	vim.cmd('normal! zz')
+    local total_lines = api.nvim_buf_line_count(buf)
+    
+    -- Primeiro, vamos limpar todas as folds existentes
+    vim.cmd('normal! zE')
+    
+    -- Encontra todas as linhas de cabeçalho
+    local headers = {}
+    for i = 0, total_lines - 1 do
+        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+        if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or 
+                   line:match("^===") or line:match("^==")) then
+            table.insert(headers, {line = i, type = "foldable"})
+        elseif line and line:match("^## API atual:") then
+            table.insert(headers, {line = i, type = "api_info"})
+        end
+    end
+    
+    -- Ordena por número de linha
+    table.sort(headers, function(a, b) return a.line < b.line end)
+    
+    -- Cria folds apenas para os cabeçalhos "foldable"
+    for i = 1, #headers do
+        local current_header = headers[i]
+        
+        -- Pular se for a linha da API atual
+        if current_header.type == "api_info" then
+            goto continue
+        end
+        
+        local fold_start = current_header.line + 1
+        local fold_end = total_lines - 1
+        
+        -- Encontrar o próximo cabeçalho (foldable ou api_info)
+        for j = i + 1, #headers do
+            local next_header = headers[j]
+            fold_end = next_header.line - 1
+            break
+        end
+        
+        -- Só cria a fold se houver conteúdo após o cabeçalho
+        if fold_start <= fold_end then
+            vim.api.nvim_buf_call(buf, function()
+                vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
+            end)
+        end
+        
+        ::continue::
+    end
+    
+    -- Fecha todas as folds
+    vim.cmd('normal! zM')
+    vim.cmd('normal! G')
+    vim.cmd('normal! zz')
 end
 
 M.update_api_display = function()

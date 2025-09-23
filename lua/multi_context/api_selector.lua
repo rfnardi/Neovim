@@ -182,22 +182,58 @@ M.select_api = function()
 end
 
 M.update_popup_api_display = function()
-	-- Verificar se o popup está aberto e atualizar a linha da API
 	local status, popup_module = pcall(require, 'multi_context.popup')
 	if status and popup_module.popup_buf and api.nvim_buf_is_valid(popup_module.popup_buf) then
 		local current_api = utils.get_current_api()
-		local lines = api.nvim_buf_get_lines(popup_module.popup_buf, 0, -1, false)
+		local buf = popup_module.popup_buf
 
-		for i, line in ipairs(lines) do
-			if line:match("^## API atual:") then
-				lines[i] = "## API atual: " .. current_api
-				api.nvim_buf_set_lines(popup_module.popup_buf, i-1, i, false, {lines[i]})
+		-- Obter todas as linhas
+		local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
 
-				-- Reaplicar highlights
-				local utils = require('multi_context.utils')
-				utils.apply_highlights(popup_module.popup_buf)
-				break
+		-- Encontrar e remover a linha antiga da API atual
+		local new_lines = {}
+		local api_line_found = false
+
+		for _, line in ipairs(lines) do
+			if not line:match("^## API atual:") then
+				table.insert(new_lines, line)
+			else
+				api_line_found = true
 			end
+		end
+
+		-- Se não encontrou a linha da API, inseri-la antes da última linha (que deve ser o prompt)
+		if not api_line_found and #new_lines > 0 then
+			table.insert(new_lines, #new_lines, "## API atual: " .. current_api)
+		else
+			-- Encontrar a posição do último prompt para inserir antes dele
+			local insert_pos = #new_lines
+			for i = #new_lines, 1, -1 do
+				if new_lines[i]:match("^## Nardi >>") then
+					insert_pos = i
+					break
+				end
+			end
+			table.insert(new_lines, insert_pos, "## API atual: " .. current_api)
+		end
+
+		-- Atualizar o buffer
+		api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+
+		-- Reaplicar highlights
+		local utils = require('multi_context.utils')
+		utils.apply_highlights(buf)
+
+		-- Recriar as folds
+		if popup_module.create_folds then
+			popup_module.create_folds(buf)
+		end
+
+		-- Reposicionar o cursor no final
+		local last_line = #new_lines
+		if popup_module.popup_win and api.nvim_win_is_valid(popup_module.popup_win) then
+			api.nvim_win_set_cursor(popup_module.popup_win, {last_line, #"## Nardi >> "})
+			vim.cmd("startinsert")
 		end
 	end
 end
