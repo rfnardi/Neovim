@@ -51,7 +51,7 @@ end
 
 M.apply_highlights = function(buf)
 	vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")
-	vim.cmd("highlight ContextUserAI gui=bold guifg=#0000CD guibg=NONE")
+	vim.cmd("highlight ContextUserAI gui=bold guifg=#32CD32 guibg=NONE")
 	vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")
 	vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")
 	vim.cmd("highlight ContextUpdateMessages gui=bold guifg=#FFA500 guibg=NONE")
@@ -73,13 +73,6 @@ M.apply_highlights = function(buf)
 
 		if line and line:match("%[mensagem enviada%]") then
 			local start_idx, end_idx = line:find("%[mensagem enviada%]")
-			if start_idx then
-				api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
-			end
-		end
-
-		if line and line:match("%[mensagem recebida%]") then
-			local start_idx, end_idx = line:find("%[mensagem recebida%]")
 			if start_idx then
 				api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
 			end

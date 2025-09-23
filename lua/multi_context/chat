@@ -1,0 +1,1140 @@
+=== Arquivos na pasta /home/nardi/.config/nvim/lua/multi_context:
+api_handlers.lua
+commands.lua
+init.lua
+popup.lua
+utils.lua
+
+== Arquivo: api_handlers.lua
+local M = {}
+
+M.openai = {
+    make_request = function(api_config, messages, api_keys, callback)
+        local json_payload = vim.fn.json_encode({
+            model = api_config.model,
+            messages = messages
+        })
+
+        local headers = {}
+        for k, v in pairs(api_config.headers or {}) do
+            if v == "{API_KEY}" then
+                v = api_keys[api_config.name] or ""
+            end
+            table.insert(headers, "-H")
+            table.insert(headers, k .. ": " .. v)
+        end
+
+        local cmd = vim.list_extend({"curl", "-s", "-X", "POST", api_config.url}, headers)
+        table.insert(cmd, "-d")
+        table.insert(cmd, json_payload)
+
+        local stdout_accum = {}
+        local stderr_accum = {}
+
+        vim.fn.jobstart(cmd, {
+            stdout_buffered = true,
+            on_stdout = function(_, data, _)
+                if data then
+                    for _, d in ipairs(data) do
+                        if d and d ~= "" then
+                            table.insert(stdout_accum, d)
+                        end
+                    end
+                end
+            end,
+            on_stderr = function(_, data, _)
+                if data then
+                    for _, d in ipairs(data) do
+                        if d and d ~= "" then
+                            table.insert(stderr_accum, d)
+                        end
+                    end
+                end
+            end,
+            on_exit = function(_, code, _)
+                if code == 0 then
+                    callback(true, table.concat(stdout_accum, "\n"))
+                else
+                    callback(false, table.concat(stderr_accum, "\n"))
+                end
+            end
+        })
+    end,
+    
+    parse_response = function(response_text)
+        local ok, decoded = pcall(vim.fn.json_decode, response_text)
+        if not ok or not decoded or not decoded.choices or not decoded.choices[1] then
+            return nil, "Erro ao decodificar resposta OpenAI"
+        end
+        return decoded.choices[1].message.content or "", nil
+    end
+}
+
+M.gemini = {
+    make_request = function(api_config, messages, api_keys, callback)
+        -- Converter mensagens para formato Gemini
+        local gemini_messages = {}
+        for _, msg in ipairs(messages) do
+            table.insert(gemini_messages, {
+                role = msg.role == "user" and "user" or "model",
+                parts = {
+                    {
+                        text = msg.content
+                    }
+                }
+            })
+        end
+
+        local json_payload = vim.fn.json_encode({
+            contents = gemini_messages
+        })
+
+        local headers = {}
+        for k, v in pairs(api_config.headers or {}) do
+            if v == "{API_KEY}" then
+                v = api_keys[api_config.name] or ""
+            end
+            table.insert(headers, "-H")
+            table.insert(headers, k .. ": " .. v)
+        end
+
+        local cmd = vim.list_extend({"curl", "-s", "-X", "POST", api_config.url}, headers)
+        table.insert(cmd, "-d")
+        table.insert(cmd, json_payload)
+
+        local stdout_accum = {}
+        local stderr_accum = {}
+
+        vim.fn.jobstart(cmd, {
+            stdout_buffered = true,
+            on_stdout = function(_, data, _)
+                if data then
+                    for _, d in ipairs(data) do
+                        if d and d ~= "" then
+                            table.insert(stdout_accum, d)
+                        end
+                    end
+                end
+            end,
+            on_stderr = function(_, data, _)
+                if data then
+                    for _, d in ipairs(data) do
+                        if d and d ~= "" then
+                            table.insert(stderr_accum, d)
+                        end
+                    end
+                end
+            end,
+            on_exit = function(_, code, _)
+                if code == 0 then
+                    callback(true, table.concat(stdout_accum, "\n"))
+                else
+                    callback(false, table.concat(stderr_accum, "\n"))
+                end
+            end
+        })
+    end,
+    
+    parse_response = function(response_text)
+        local ok, decoded = pcall(vim.fn.json_decode, response_text)
+        if not ok then
+            return nil, "Erro ao decodificar JSON da resposta Gemini"
+        end
+        
+        -- Verificar se há erro na resposta
+        if decoded.error then
+            return nil, decoded.error.message or "Erro na API Gemini"
+        end
+        
+        -- Verificar a estrutura da resposta
+        if not decoded.candidates or not decoded.candidates[1] then
+            return nil, "Resposta da Gemini sem candidatos"
+        end
+        
+        local candidate = decoded.candidates[1]
+        if not candidate.content or not candidate.content.parts or not candidate.content.parts[1] then
+            return nil, "Estrutura de candidato inválida na resposta Gemini"
+        end
+        
+        return candidate.content.parts[1].text or "", nil
+    end
+}
+
+M.cloudflare = {
+    make_request = function(api_config, messages, api_keys, callback)
+        local json_payload = vim.fn.json_encode({
+            messages = messages
+        })
+
+        local headers = {}
+        for k, v in pairs(api_config.headers or {}) do
+            if v == "{API_KEY}" then
+                v = api_keys[api_config.name] or ""
+            end
+            table.insert(headers, "-H")
+            table.insert(headers, k .. ": " .. v)
+        end
+
+        local cmd = vim.list_extend({"curl", "-s", "-X", "POST", api_config.url}, headers)
+        table.insert(cmd, "-d")
+        table.insert(cmd, json_payload)
+
+        local stdout_accum = {}
+        local stderr_accum = {}
+
+        vim.fn.jobstart(cmd, {
+            stdout_buffered = true,
+            on_stdout = function(_, data, _)
+                if data then
+                    for _, d in ipairs(data) do
+                        if d and d ~= "" then
+                            table.insert(stdout_accum, d)
+                        end
+                    end
+                end
+            end,
+            on_stderr = function(_, data, _)
+                if data then
+                    for _, d in ipairs(data) do
+                        if d and d ~= "" then
+                            table.insert(stderr_accum, d)
+                        end
+                    end
+                end
+            end,
+            on_exit = function(_, code, _)
+                if code == 0 then
+                    callback(true, table.concat(stdout_accum, "\n"))
+                else
+                    callback(false, table.concat(stderr_accum, "\n"))
+                end
+            end
+        })
+    end,
+    
+    parse_response = function(response_text)
+        local ok, decoded = pcall(vim.fn.json_decode, response_text)
+        if not ok or not decoded or not decoded.result then
+            return nil, "Erro ao decodificar resposta Cloudflare"
+        end
+        return decoded.result.response or "", nil
+    end
+}
+
+return M
+
+== Arquivo: commands.lua
+local utils = require('multi_context.utils')
+local popup = require('multi_context.popup')
+
+local M = {}
+
+M.ContextChatFull = function()
+    local text = utils.get_full_buffer()
+    popup.open_popup(text, text)
+end
+
+M.ContextChatSelection = function(start_line, end_line)
+    local text = utils.get_selection(start_line, end_line)
+    popup.open_popup(text, text)
+end
+
+M.ContextChatFolder = function()
+    local text = utils.read_folder_context()
+    popup.open_popup(text, text)
+end
+
+M.ContextChatHandler = function(start_line, end_line)
+    if start_line and end_line and tonumber(start_line) and tonumber(end_line) and tonumber(end_line) ~= tonumber(start_line) then
+        -- seleção de múltiplas linhas
+        M.ContextChatSelection(start_line, end_line)
+    else
+        -- modo normal ou range de uma linha
+        M.ContextChatFull()
+    end
+end
+
+M.ContextChatRepo = function()
+    local text = utils.read_repo_context()
+    if text == "" then
+        return
+    end
+    popup.open_popup(text, text)
+end
+
+return M
+
+== Arquivo: init.lua
+local api = vim.api
+local utils = require('multi_context.utils')
+local popup = require('multi_context.popup')
+local commands = require('multi_context.commands')
+local api_handlers = require('multi_context.api_handlers')
+
+local M = {}
+
+M.popup_buf = popup.popup_buf
+M.popup_win = popup.popup_win
+M.history = {}
+M.context_text = nil
+
+-- Expor funções públicas
+M.ContextChatFull = commands.ContextChatFull
+M.ContextChatSelection = commands.ContextChatSelection
+M.ContextChatFolder = commands.ContextChatFolder
+M.ContextChatHandler = commands.ContextChatHandler
+M.ContextChatRepo = commands.ContextChatRepo
+
+-- ======================================================
+-- Envio para LLM
+-- ======================================================
+function M.SendFromPopup()
+	if not popup.popup_buf or not api.nvim_buf_is_valid(popup.popup_buf) then
+		vim.notify("Popup não está aberto. Use :Context, :ContextRange ou :ContextFolder", vim.log.levels.WARN)
+		return
+	end
+
+	local buf = popup.popup_buf
+	local start_idx, _ = utils.find_last_user_line(buf)
+	if not start_idx then
+		vim.notify("Nenhuma linha '## Nardi >>' encontrada.", vim.log.levels.WARN)
+		return
+	end
+
+	local lines = api.nvim_buf_get_lines(buf, start_idx, -1, false)
+	local user_text = table.concat(lines, "\n"):gsub("^## Nardi >>%s*", "")
+	if user_text == "" then
+		vim.notify("Digite algo após '## Nardi >>' antes de enviar.", vim.log.levels.WARN)
+		return
+	end
+
+	-- marca envio
+	api.nvim_buf_set_lines(buf, -1, -1, false, { "[mensagem enviada]" })
+	vim.notify("mensagem enviada", vim.log.levels.INFO)
+
+	table.insert(M.history, { user = user_text, ai = nil })
+
+	-- Obter TODO o conteúdo do popup (contexto + histórico)
+	local full_context = utils.get_popup_content(buf)
+
+	-- Construir mensagens para a API
+	local messages = {}
+
+	-- Adicionar todo o contexto do popup como mensagem de sistema
+	table.insert(messages, { role = "system", content = full_context })
+
+	-- Adicionar apenas a última mensagem do usuário (o que foi digitado após ## Nardi >>)
+	table.insert(messages, { role = "user", content = user_text })
+
+	-- Carregar configurações das APIs
+	local api_config = utils.load_api_config()
+	if not api_config then
+		vim.notify("Arquivo de configuração das APIs não encontrado", vim.log.levels.ERROR)
+		return
+	end
+
+	-- Carregar chaves de API
+	local api_keys = utils.load_api_keys()
+
+	local selected_api = api_config.default_api
+	local fallback_mode = api_config.fallback_mode or false
+	local apis = api_config.apis or {}
+
+	-- Função para tentar a próxima API em caso de falha
+	local function try_apis(api_list, index)
+		if index > #api_list then
+			vim.notify("Todas as APIs falharam", vim.log.levels.ERROR)
+			return
+		end
+
+		local current_api = api_list[index]
+		local handler = api_handlers[current_api.api_type or "openai"]
+
+		if not handler then
+			vim.notify("Tipo de API não suportado: " .. (current_api.api_type or "unknown"), vim.log.levels.ERROR)
+			if fallback_mode then
+				try_apis(api_list, index + 1)
+			end
+			return
+		end
+
+		handler.make_request(current_api, messages, api_keys, function(success, result)
+			if success then
+				local ai_content, error_msg = handler.parse_response(result)
+				if not ai_content then
+					vim.notify("Erro ao processar resposta: " .. error_msg, vim.log.levels.ERROR)
+					if fallback_mode then
+						try_apis(api_list, index + 1)
+					end
+					return
+				end
+
+				ai_content = "## IA (" .. current_api.model .. ") >> \n" .. ai_content
+				M.history[#M.history].ai = ai_content
+
+				vim.schedule(function()
+					local last_line = api.nvim_buf_line_count(buf) - 1
+					local ai_lines = utils.split_lines(ai_content)
+
+					-- Inserir a resposta da IA
+					utils.insert_after(buf, last_line, ai_lines)
+
+					-- Inserir nova linha com ## Nardi >> após a resposta
+					utils.insert_after(buf, -1, { "", "## Nardi >> " })
+
+					-- Aplicar highlights novamente para incluir as novas linhas
+					utils.apply_highlights(buf)
+
+					if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
+						api.nvim_win_set_cursor(popup.popup_win, { api.nvim_buf_line_count(buf), #"## Nardi >> " })
+					end
+					vim.cmd("startinsert")
+					vim.notify("mensagem recebida de " .. current_api.name, vim.log.levels.INFO)
+				end)
+			else
+				vim.notify("API " .. current_api.name .. " falhou: " .. result, vim.log.levels.WARN)
+				if fallback_mode then
+					try_apis(api_list, index + 1)
+				end
+			end
+		end)
+	end
+
+	-- Determinar qual API(s) usar
+	local api_list = {}
+	if fallback_mode then
+		api_list = apis
+	else
+		-- Encontrar a API pelo nome
+		for _, api in ipairs(apis) do
+			if api.name == selected_api then
+				api_list = {api}
+				break
+			end
+		end
+		if #api_list == 0 and #apis > 0 then
+			api_list = {apis[1]}
+		end
+	end
+
+	-- Fazer a requisição
+	if #api_list > 0 then
+		try_apis(api_list, 1)
+	else
+		vim.notify("Nenhuma API configurada", vim.log.levels.ERROR)
+	end
+end
+
+return M
+
+== Arquivo: popup.lua ## buffer atual ##
+local api = vim.api
+local utils = require('multi_context.utils')
+
+local M = {}
+
+M.popup_buf = nil
+M.popup_win = nil
+
+M.open_popup = function(text, context_text)
+	M.context_text = context_text
+	local buf = api.nvim_create_buf(false, true)
+	M.popup_buf = buf
+
+	local width = math.floor(vim.o.columns * 0.7)
+	local height = math.floor(vim.o.lines * 0.7)
+	local row = math.floor((vim.o.lines - height) / 2)
+	local col = math.floor((vim.o.columns - width) / 2)
+
+	M.popup_win = api.nvim_open_win(buf, true, {
+		relative = "editor",
+		width = width,
+		height = height,
+		row = row,
+		col = col,
+		style = "minimal",
+		border = "rounded",
+	})
+
+	local lines = utils.split_lines(text)
+	table.insert(lines, "")
+	table.insert(lines, "## Nardi >> ")
+	api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+	api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
+	vim.cmd("startinsert")
+
+	-- Ctrl+S
+	api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+	api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+
+	-- Aplicar highlights iniciais
+	utils.apply_highlights(buf)
+
+	-- Configuração de folds
+	api.nvim_buf_set_option(buf, "foldmethod", "manual")
+	api.nvim_buf_set_option(buf, "foldenable", true)
+	api.nvim_buf_set_option(buf, "foldlevel", 1)
+
+	M.create_folds(buf)
+end
+
+M.create_folds = function(buf)
+	local total_lines = api.nvim_buf_line_count(buf)
+
+	-- Primeiro, vamos limpar todas as folds existentes
+	vim.cmd('normal! zE')
+
+	-- Encontra todas as linhas de cabeçalho
+	local headers = {}
+	for i = 0, total_lines - 1 do
+		local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+		if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or 
+			line:match("^===") or line:match("^==")) then
+			table.insert(headers, i)
+		end
+	end
+
+	-- Ordena por número de linha
+	table.sort(headers)
+
+	-- Cria folds para o conteúdo após cada cabeçalho
+	for i = 1, #headers do
+		local header_line = headers[i]
+		local fold_start = header_line + 1
+		local fold_end = total_lines - 1
+
+		-- Encontra o próximo cabeçalho ou usa o final do buffer
+		if i < #headers then
+			fold_end = headers[i + 1] - 1
+		end
+
+		-- Só cria a fold se houver conteúdo após o cabeçalho
+		if fold_start <= fold_end then
+			vim.api.nvim_buf_call(buf, function()
+				vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
+			end)
+		end
+	end
+
+	-- Fecha todas as folds
+	vim.cmd('normal! zM')
+	vim.cmd('normal! G')
+	vim.cmd('normal! zz')
+end
+
+return M
+
+== Arquivo: utils.lua
+local api = vim.api
+
+local M = {}
+
+M.split_lines = function(str)
+	local t = {}
+	for line in str:gmatch("([^\n]*)\n?") do
+		table.insert(t, line)
+	end
+	return t
+end
+
+M.insert_after = function(buf, line_idx, lines)
+	if line_idx == -1 then
+		line_idx = api.nvim_buf_line_count(buf) - 1
+	end
+	api.nvim_buf_set_lines(buf, line_idx + 1, line_idx + 1, false, lines)
+end
+
+M.find_last_user_line = function(buf)
+	local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+	for i = #lines, 1, -1 do
+		if lines[i]:match("^## Nardi >>") then
+			return i - 1, lines[i]
+		end
+	end
+	return nil
+end
+
+M.load_api_config = function()
+	local config_path = vim.fn.expand('~/.config/nvim/context_apis.json')
+	local file = io.open(config_path, 'r')
+	if not file then
+		return nil
+	end
+	local content = file:read('*a')
+	file:close()
+	return vim.fn.json_decode(content)
+end
+
+M.load_api_keys = function()
+	local keys_path = vim.fn.expand('~/.config/nvim/api_keys.json')
+	local file = io.open(keys_path, 'r')
+	if not file then
+		return {}
+	end
+	local content = file:read('*a')
+	file:close()
+	return vim.fn.json_decode(content) or {}
+end
+
+M.apply_highlights = function(buf)
+	vim.cmd("highlight ContextHeader gui=bold guifg=#FF4500 guibg=NONE")
+	vim.cmd("highlight ContextUserAI gui=bold guifg=#32CD32 guibg=NONE")
+	vim.cmd("highlight ContextUser gui=bold guifg=#B22222 guibg=NONE")
+	vim.cmd("highlight ContextCurrentBuffer gui=bold guifg=#FFA500 guibg=NONE")
+	vim.cmd("highlight ContextUpdateMessages gui=bold guifg=#FFA500 guibg=NONE")
+
+	local total_lines = api.nvim_buf_line_count(buf)
+
+	for i = 0, total_lines - 1 do
+		local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+		if line:match("^===") or line:match("^==") then
+			api.nvim_buf_add_highlight(buf, -1, "ContextHeader", i, 0, -1)
+		end
+
+		if line and line:match("## buffer atual ##") then
+			local start_idx, end_idx = line:find("## buffer atual ##")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextCurrentBuffer", i, start_idx-1, end_idx)
+			end
+		end
+
+		if line and line:match("%[mensagem enviada%]") then
+			local start_idx, end_idx = line:find("%[mensagem enviada%]")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextUpdateMessages", i, start_idx-1, end_idx)
+			end
+		end
+
+		if line and line:match("^## Nardi >>") then
+			local start_idx, end_idx = line:find("## Nardi >>")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextUser", i, start_idx-1, end_idx)
+			end
+		end
+
+		if line and line:match("^## IA .* >>") then
+			local start_idx, end_idx = line:find("## IA .* >>")
+			if start_idx then
+				api.nvim_buf_add_highlight(buf, -1, "ContextUserAI", i, start_idx-1, end_idx)
+			end
+		end
+	end
+end
+
+M.get_full_buffer = function()
+	local buf = api.nvim_get_current_buf()
+	local line_count = api.nvim_buf_line_count(buf)
+	local lines = api.nvim_buf_get_lines(buf, 0, line_count, false)
+	return table.concat(lines, "\n")
+end
+
+M.get_selection = function(start_line, end_line)
+	local buf = api.nvim_get_current_buf()
+	start_line = tonumber(start_line)
+	end_line = tonumber(end_line)
+	if not start_line or not end_line then
+		vim.notify("Seleção inválida", vim.log.levels.WARN)
+		return ""
+	end
+	local lines = api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
+	return table.concat(lines, "\n")
+end
+
+M.read_folder_context = function()
+	local cur_file = api.nvim_buf_get_name(0)
+	if cur_file == "" then return "" end
+	local dir = vim.fn.fnamemodify(cur_file, ":h")
+	local cur_fname = vim.fn.fnamemodify(cur_file, ":t")
+	local context_lines = {}
+
+	-- Seção ls
+	table.insert(context_lines, "=== Arquivos na pasta " .. dir .. ":")
+	local files = vim.fn.readdir(dir)
+	table.insert(context_lines, table.concat(files, "\n"))
+	table.insert(context_lines, "")
+
+	-- Seção cat
+	for _, fname in ipairs(files) do
+		local full_path = dir .. "/" .. fname
+		if vim.fn.isdirectory(full_path) == 0 then
+			local lines = vim.fn.readfile(full_path)
+			local header = "== Arquivo: " .. fname
+			if fname == cur_fname then
+				header = header .. " ## buffer atual ##"
+			end
+			table.insert(context_lines, header)
+			vim.list_extend(context_lines, lines)
+			table.insert(context_lines, "")
+		end
+	end
+	return table.concat(context_lines, "\n")
+end
+
+M.get_popup_content = function(buf)
+	local line_count = api.nvim_buf_line_count(buf)
+	local lines = api.nvim_buf_get_lines(buf, 0, line_count - 1, false)  -- Exclui a última linha (## Nardi >>)
+	return table.concat(lines, "\n")
+end
+
+M.find_git_root = function(start_path)
+	local path = start_path or vim.fn.expand('%:p:h')
+	local current = path
+	while current ~= '/' do
+		local git_dir = current .. '/.git'
+		if vim.fn.isdirectory(git_dir) == 1 then
+			return current
+		end
+		current = vim.fn.fnamemodify(current, ':h')
+	end
+	return nil
+end
+
+M.read_repo_context = function()
+	local cur_file = api.nvim_buf_get_name(0)
+	if cur_file == '' then return "" end
+
+	local git_root = M.find_git_root()
+	if not git_root then
+		vim.notify("Não foi possível encontrar a raiz do repositório Git", vim.log.levels.WARN)
+		return ""
+	end
+
+	local context_lines = {}
+	table.insert(context_lines, "=== Estrutura do Repositório Git em " .. git_root .. ":")
+
+	-- Função recursiva para listar arquivos, ignorando a pasta .git
+	local function list_files(dir, prefix)
+		local files = {}
+		local items = vim.fn.readdir(dir)
+
+		-- Ordenar: diretórios primeiro, depois arquivos
+		local dirs = {}
+		local files_list = {}
+
+		for _, item in ipairs(items) do
+			if item ~= ".git" then  -- Ignorar pasta .git
+				local full_path = dir .. '/' .. item
+				if vim.fn.isdirectory(full_path) == 1 then
+					table.insert(dirs, item)
+				else
+					table.insert(files_list, item)
+				end
+			end
+		end
+
+		-- Ordenar alfabeticamente
+		table.sort(dirs)
+		table.sort(files_list)
+
+		-- Adicionar diretórios
+		for _, dir_name in ipairs(dirs) do
+			local full_path = dir .. '/' .. dir_name
+			table.insert(files, {name = dir_name, is_dir = true, path = full_path})
+		end
+
+		-- Adicionar arquivos
+		for _, file_name in ipairs(files_list) do
+			local full_path = dir .. '/' .. file_name
+			table.insert(files, {name = file_name, is_dir = false, path = full_path})
+		end
+
+		return files
+	end
+
+	-- Listar estrutura de arquivos
+	local function build_tree(dir, indent, base_indent)
+		indent = indent or ""
+		base_indent = base_indent or ""
+		local files = list_files(dir)
+
+		for i, item in ipairs(files) do
+			local is_last = i == #files
+			local connector = is_last and "└── " or "├── "
+
+			if item.is_dir then
+				table.insert(context_lines, base_indent .. indent .. connector .. item.name .. "/")
+				local new_indent = indent .. (is_last and "    " or "│   ")
+				build_tree(item.path, new_indent, base_indent)
+			else
+				table.insert(context_lines, base_indent .. indent .. connector .. item.name)
+			end
+		end
+	end
+
+	build_tree(git_root, "", "")
+	table.insert(context_lines, "")
+
+	-- Adicionar conteúdo dos arquivos
+	local function add_file_contents(dir)
+		local items = vim.fn.readdir(dir)
+
+		for _, item in ipairs(items) do
+			if item ~= ".git" then
+				local full_path = dir .. '/' .. item
+				if vim.fn.isdirectory(full_path) == 1 then
+					add_file_contents(full_path)
+				else
+					-- Verificar se é um arquivo de texto (ignorar binários)
+					local extension = vim.fn.fnamemodify(item, ':e')
+					local binary_extensions = {
+						'png', 'jpg', 'jpeg', 'gif', 'pdf', 'zip', 'tar', 'gz',
+						'mp3', 'mp4', 'avi', 'mkv', 'ico', 'woff', 'woff2', 'ttf'
+					}
+
+					local is_binary = false
+					for _, ext in ipairs(binary_extensions) do
+						if extension:lower() == ext then
+							is_binary = true
+							break
+						end
+					end
+
+					if not is_binary then
+						local relative_path = full_path:sub(#git_root + 2)
+						local is_current_file = cur_file == full_path
+
+						local header = "== Arquivo: " .. relative_path
+						if is_current_file then
+							header = header .. " ## buffer atual ##"
+						end
+
+						table.insert(context_lines, header)
+
+						local success, file_lines = pcall(vim.fn.readfile, full_path)
+						if success then
+							vim.list_extend(context_lines, file_lines)
+						else
+							table.insert(context_lines, "-- Não foi possível ler o arquivo --")
+						end
+						table.insert(context_lines, "")
+					end
+				end
+			end
+		end
+	end
+
+	table.insert(context_lines, "=== Conteúdo dos Arquivos:")
+	add_file_contents(git_root)
+
+	return table.concat(context_lines, "\n")
+end
+
+return M
+
+
+## Nardi >> Me explique o funcionamento deste código 
+[mensagem enviada]
+## IA (gemini-2.0-flash) >> 
+Com certeza! Para te explicar o funcionamento do código, preciso que você me diga qual deles você quer que eu explique. Você pode me dizer o nome do arquivo ou colar o código aqui.
+
+Por exemplo:
+
+*   "Me explique o arquivo `init.lua`"
+*   "Me explique o seguinte código: `local api = vim.api ... return M`"
+
+Assim que você me disser qual código, posso te dar uma explicação detalhada, incluindo:
+
+*   Uma visão geral do propósito do código.
+*   Explicação de cada função e suas responsabilidades.
+*   Como os diferentes módulos interagem entre si.
+*   O fluxo de execução geral.
+
+Estou à disposição para te ajudar!
+
+
+## Nardi >> Me explique o fluxo da execução em geral quando aciono o comando :ContextRepo 
+[mensagem enviada]
+## IA (gemini-2.0-flash) >> 
+Com certeza! Veja o fluxo de execução geral quando você aciona o comando `:ContextRepo`:
+
+1.  **Comando Acionado:**
+    *   Você digita e executa o comando `:ContextRepo` no Neovim.
+
+2.  **`commands.lua`:**
+    *   O comando é mapeado para a função `M.ContextChatRepo` no arquivo `commands.lua`.
+    *   `M.ContextChatRepo` é responsável por orquestrar a leitura do contexto do repositório Git.
+
+3.  **`utils.lua`:**
+    *   `M.ContextChatRepo` chama a função `utils.read_repo_context()` para obter o contexto do repositório.
+    *   Dentro de `utils.read_repo_context()`:
+        *   `api.nvim_buf_get_name(0)`: Obtém o nome do arquivo atualmente aberto no buffer.
+        *   `M.find_git_root()`: Procura a raiz do repositório Git a partir do diretório do arquivo atual.
+        *   `vim.fn.readdir()`: Utilizado para listar os arquivos e diretórios dentro da estrutura do repositório.
+        *   Função recursiva `build_tree()`: Constrói uma representação em árvore da estrutura de diretórios, ignorando a pasta `.git`.
+        *   Função `add_file_contents()`: Itera sobre os arquivos e lê o conteúdo de cada um (exceto arquivos binários) para adicionar ao contexto.
+        *   Os conteúdos dos arquivos e a estrutura do repositório são concatenados em uma string.
+
+4.  **`popup.lua`:**
+    *   `utils.read_repo_context()` retorna o texto do contexto (estrutura do repositório + conteúdo dos arquivos).
+    *   `M.ContextChatRepo` chama `popup.open_popup()` passando o texto do contexto.
+    *   `popup.open_popup()`:
+        *   Cria um novo buffer (`api.nvim_create_buf()`).
+        *   Abre uma janela de popup (`api.nvim_open_win()`) com o novo buffer.
+        *   Formata o texto do contexto e o insere no buffer do popup.
+        *   Define keymaps para o buffer do popup (como `<C-s>` para enviar).
+        *   Aplica highlights iniciais ao buffer.
+        *   Cria folds no buffer para melhor organização.
+
+5.  **Popup Exibido:**
+    *   O popup é exibido na tela com o contexto do repositório, a estrutura de diretórios e o conteúdo dos arquivos.
+    *   O cursor é posicionado na linha "## Nardi >> " para você começar a digitar.
+
+**Em resumo:**
+
+1.  O comando `:ContextRepo` inicia o processo.
+2.  `commands.lua` delega a leitura do contexto para `utils.lua`.
+3.  `utils.lua` obtém a estrutura do repositório e o conteúdo dos arquivos.
+4.  `commands.lua` passa o contexto para `popup.lua`.
+5.  `popup.lua` cria e exibe o popup com o contexto.
+
+Este fluxo permite que você rapidamente capture informações sobre a estrutura do seu projeto e o conteúdo dos arquivos relevantes para formular suas perguntas ou comandos para a IA.
+
+
+## Nardi >> Ok. Quero fazer uma pequena mudança: quero que eu possa fechar o popup para fazer uma edição no código e depois voltar a reabrir o popup para continuar o chat com a IA. Proponha alterações cirúrgicas no código de modo a implementar esta funcionalidade
+[mensagem enviada]
+## IA (gemini-2.0-flash) >> 
+Ok, entendi. Para permitir que você feche e reabra o popup sem perder o contexto do chat, podemos implementar as seguintes mudanças cirúrgicas no código:
+
+1.  **Salvar o estado do popup:** Quando o popup for fechado, vamos armazenar o conteúdo do buffer e a posição do cursor.
+2.  **Reabrir o popup:** Quando o comando de contexto for chamado novamente, verificaremos se existe um estado salvo. Se existir, restauraremos o popup com o conteúdo e posição do cursor salvos.
+
+Aqui estão as modificações específicas nos arquivos:
+
+**`init.lua`:**
+
+```lua
+local api = vim.api
+local utils = require('multi_context.utils')
+local popup = require('multi_context.popup')
+local commands = require('multi_context.commands')
+local api_handlers = require('multi_context.api_handlers')
+
+local M = {}
+
+M.popup_buf = popup.popup_buf
+M.popup_win = popup.popup_win
+M.history = {}
+M.context_text = nil
+M.popup_state = nil -- Adicionar para armazenar o estado do popup
+
+-- Expor funções públicas
+M.ContextChatFull = commands.ContextChatFull
+M.ContextChatSelection = commands.ContextChatSelection
+M.ContextChatFolder = commands.ContextChatFolder
+M.ContextChatHandler = commands.ContextChatHandler
+M.ContextChatRepo = commands.ContextChatRepo
+
+-- ======================================================
+-- Envio para LLM
+-- ======================================================
+-- (O código de SendFromPopup permanece praticamente o mesmo)
+
+-- Função para salvar o estado do popup
+M.save_popup_state = function()
+    if popup.popup_buf and api.nvim_buf_is_valid(popup.popup_buf) then
+        local lines = api.nvim_buf_get_lines(popup.popup_buf, 0, -1, false)
+        local cursor = api.nvim_win_get_cursor(popup.popup_win)
+        M.popup_state = {
+            lines = lines,
+            cursor = cursor
+        }
+    end
+end
+
+-- Hook para fechar o popup
+api.nvim_create_autocmd("WinClosed", {
+    pattern = "*", -- Ou um padrão mais específico se necessário
+    callback = function(ev)
+        if ev.data.winid == M.popup_win then
+            M.save_popup_state()
+            M.popup_win = nil
+            M.popup_buf = nil
+        end
+    end,
+    desc = "Salva o estado do popup quando fechado"
+})
+
+return M
+```
+
+**`popup.lua`:**
+
+```lua
+local api = vim.api
+local utils = require('multi_context.utils')
+local init = require('multi_context') -- Require para acessar M.popup_state
+
+local M = {}
+
+M.popup_buf = nil
+M.popup_win = nil
+
+M.open_popup = function(text, context_text)
+    M.context_text = context_text
+
+    -- Verificar se existe um estado salvo
+    if init.popup_state then
+        -- Restaurar o popup com o estado salvo
+        M.restore_popup(init.popup_state)
+    else
+        -- Criar um novo popup
+        M.create_new_popup(text)
+    end
+end
+
+M.create_new_popup = function(text)
+    local buf = api.nvim_create_buf(false, true)
+    M.popup_buf = buf
+
+    local width = math.floor(vim.o.columns * 0.7)
+    local height = math.floor(vim.o.lines * 0.7)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+
+    M.popup_win = api.nvim_open_win(buf, true, {
+        relative = "editor",
+        width = width,
+        height = height,
+        row = row,
+        col = col,
+        style = "minimal",
+        border = "rounded",
+    })
+
+    local lines = utils.split_lines(text)
+    table.insert(lines, "")
+    table.insert(lines, "## Nardi >> ")
+    api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
+    vim.cmd("startinsert")
+
+    -- Ctrl+S
+    api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+    api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+
+    -- Aplicar highlights iniciais
+    utils.apply_highlights(buf)
+
+    -- Configuração de folds
+    api.nvim_buf_set_option(buf, "foldmethod", "manual")
+    api.nvim_buf_set_option(buf, "foldenable", true)
+    api.nvim_buf_set_option(buf, "foldlevel", 1)
+
+    M.create_folds(buf)
+end
+
+M.restore_popup = function(state)
+    local buf = api.nvim_create_buf(false, true)
+    M.popup_buf = buf
+
+    local width = math.floor(vim.o.columns * 0.7)
+    local height = math.floor(vim.o.lines * 0.7)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+
+    M.popup_win = api.nvim_open_win(buf, true, {
+        relative = "editor",
+        width = width,
+        height = height,
+        row = row,
+        col = col,
+        style = "minimal",
+        border = "rounded",
+    })
+
+    api.nvim_buf_set_lines(buf, 0, -1, false, state.lines)
+    api.nvim_win_set_cursor(M.popup_win, state.cursor)
+    vim.cmd("startinsert")
+
+    -- Ctrl+S
+    api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+    api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
+
+    -- Aplicar highlights iniciais
+    utils.apply_highlights(buf)
+
+    -- Configuração de folds
+    api.nvim_buf_set_option(buf, "foldmethod", "manual")
+    api.nvim_buf_set_option(buf, "foldenable", true)
+    api.nvim_buf_set_option(buf, "foldlevel", 1)
+
+    M.create_folds(buf)
+end
+
+M.create_folds = function(buf)
+    local total_lines = api.nvim_buf_line_count(buf)
+
+    -- Primeiro, vamos limpar todas as folds existentes
+    vim.cmd('normal! zE')
+
+    -- Encontra todas as linhas de cabeçalho
+    local headers = {}
+    for i = 0, total_lines - 1 do
+        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+        if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or
+            line:match("^===") or line:match("^==")) then
+            table.insert(headers, i)
+        end
+    end
+
+    -- Ordena por número de linha
+    table.sort(headers)
+
+    -- Cria folds para o conteúdo após cada cabeçalho
+    for i = 1, #headers do
+        local header_line = headers[i]
+        local fold_start = header_line + 1
+        local fold_end = total_lines - 1
+
+        -- Encontra o próximo cabeçalho ou usa o final do buffer
+        if i < #headers then
+            fold_end = headers[i + 1] - 1
+        end
+
+        -- Só cria a fold se houver conteúdo após o cabeçalho
+        if fold_start <= fold_end then
+            vim.api.nvim_buf_call(buf, function()
+                vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
+            end)
+        end
+    end
+
+    -- Fecha todas as folds
+    vim.cmd('normal! zM')
+    vim.cmd('normal! G')
+    vim.cmd('normal! zz')
+end
+
+return M
+```
+
+**Explicação das mudanças:**
+
+*   **`init.lua`:**
+    *   Adicionamos `M.popup_state` para armazenar as linhas do buffer e a posição do cursor.
+    *   A função `M.save_popup_state` salva o estado do popup quando chamada.
+    *   Criamos um autocmd `WinClosed` que é acionado quando uma janela é fechada. Se a janela fechada for o popup, o estado é salvo e as variáveis `M.popup_win` e `M.popup_buf` são limpas.
+*   **`popup.lua`:**
+    *   Adicionamos `require('multi_context')` para acessar `M.popup_state`.
+    *   Modificamos `M.open_popup` para verificar se `init.popup_state` existe.
+        *   Se existir, chamamos `M.restore_popup` para restaurar o popup com o estado salvo.
+        *   Se não existir, chamamos `M.create_new_popup` para criar um novo popup.
+    *   Adicionamos a função `M.restore_popup` para restaurar o buffer e a janela do popup com o conteúdo e cursor previamente salvos.
+
+**Como usar:**
+
+1.  Abra o popup usando um dos comandos `:Context...`.
+2.  Feche o popup (por exemplo, usando `:q` ou `:close`).
+3.  Faça suas edições no código.
+4.  Abra o popup novamente usando o mesmo comando `:Context...`.
+5.  O popup será restaurado com o conteúdo e posição do cursor de antes.
+
+**Observações:**
+
+*   Esta implementação usa o autocmd `WinClosed` para detectar quando o popup é fechado. Você pode ajustar o `pattern` para um padrão mais específico, se necessário.
+*   Certifique-se de que os arquivos `init.lua` e `popup.lua` estão atualizados com as modificações acima.
+
+Com essas alterações, você poderá fechar e reabrir o popup sem perder o estado do seu chat com a IA.
+
+
+## Nardi >> 
