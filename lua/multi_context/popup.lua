@@ -26,7 +26,7 @@ M.open_popup = function(text, context_text)
 		col = col,
 		style = "minimal",
 		border = "rounded",
-		title = "MultiContext - Chat",
+		title = " MultiContext - Chat ",
 		title_pos = "center",
 	})
 
@@ -59,59 +59,106 @@ M.open_popup = function(text, context_text)
 end
 
 M.create_folds = function(buf)
-    local total_lines = api.nvim_buf_line_count(buf)
-    
-    -- Primeiro, vamos limpar todas as folds existentes
-    vim.cmd('normal! zE')
-    
-    -- Encontra todas as linhas de cabeçalho
-    local headers = {}
-    for i = 0, total_lines - 1 do
-        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
-        if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or 
-                   line:match("^===") or line:match("^==")) then
-            table.insert(headers, {line = i, type = "foldable"})
-        elseif line and line:match("^## API atual:") then
-            table.insert(headers, {line = i, type = "api_info"})
-        end
-    end
-    
-    -- Ordena por número de linha
-    table.sort(headers, function(a, b) return a.line < b.line end)
-    
-    -- Cria folds apenas para os cabeçalhos "foldable"
-    for i = 1, #headers do
-        local current_header = headers[i]
-        
-        -- Pular se for a linha da API atual
-        if current_header.type == "api_info" then
-            goto continue
-        end
-        
-        local fold_start = current_header.line + 1
-        local fold_end = total_lines - 1
-        
-        -- Encontrar o próximo cabeçalho (foldable ou api_info)
-        for j = i + 1, #headers do
-            local next_header = headers[j]
-            fold_end = next_header.line - 1
-            break
-        end
-        
-        -- Só cria a fold se houver conteúdo após o cabeçalho
-        if fold_start <= fold_end then
-            vim.api.nvim_buf_call(buf, function()
-                vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
-            end)
-        end
-        
-        ::continue::
-    end
-    
-    -- Fecha todas as folds
-    vim.cmd('normal! zM')
-    vim.cmd('normal! G')
-    vim.cmd('normal! zz')
+	local total_lines = api.nvim_buf_line_count(buf)
+
+	-- Primeiro, vamos limpar todas as folds existentes
+	vim.cmd('normal! zE')
+
+	-- Encontra todas as linhas de cabeçalho
+	local headers = {}
+	for i = 0, total_lines - 1 do
+		local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+		if line and (line:match("^## Nardi >>") or line:match("^## IA .* >>") or 
+			line:match("^===") or line:match("^==")) then
+			table.insert(headers, {line = i, type = "foldable"})
+		elseif line and line:match("^## API atual:") then
+			table.insert(headers, {line = i, type = "api_info"})
+		end
+	end
+
+	-- Ordena por número de linha
+	table.sort(headers, function(a, b) return a.line < b.line end)
+
+	-- Encontra o índice da última resposta da IA
+	local last_ia_header_index = nil
+	for i = #headers, 1, -1 do
+		if headers[i].type == "foldable" and headers[i].line and api.nvim_buf_get_lines(buf, headers[i].line, headers[i].line + 1, false)[1]:match("^## IA .* >>") then
+			last_ia_header_index = i
+			break
+		end
+	end
+
+	-- Cria folds apenas para os cabeçalhos "foldable"
+	for i = 1, #headers do
+		local current_header = headers[i]
+
+		-- Pular se for a linha da API atual
+		if current_header.type == "api_info" then
+			goto continue
+		end
+
+		local fold_start = current_header.line + 1
+		local fold_end = total_lines - 1
+
+		-- Encontrar o próximo cabeçalho (foldable ou api_info)
+		for j = i + 1, #headers do
+			local next_header = headers[j]
+			fold_end = next_header.line - 1
+			break
+		end
+
+		-- Só cria a fold se houver conteúdo após o cabeçalho
+		if fold_start <= fold_end then
+			vim.api.nvim_buf_call(buf, function()
+				vim.cmd(string.format("%d,%dfold", fold_start + 1, fold_end + 1))
+			end)
+		end
+
+		::continue::
+	end
+
+	-- Fecha todas as folds, exceto a última resposta da IA
+	for i = 1, #headers do
+		local current_header = headers[i]
+		if current_header.type == "foldable" and i ~= last_ia_header_index then
+			local fold_start = current_header.line + 1
+			local fold_end = total_lines - 1
+
+			for j = i + 1, #headers do
+				local next_header = headers[j]
+				fold_end = next_header.line - 1
+				break
+			end
+
+			if fold_start <= fold_end then
+				vim.api.nvim_buf_call(buf, function()
+					vim.cmd(string.format("%d,%dfoldclose", fold_start + 1, fold_end + 1))
+				end)
+			end
+		end
+	end
+
+	-- Abre a última fold da IA (se houver)
+	if last_ia_header_index then
+		local last_ia_header = headers[last_ia_header_index]
+		local fold_start = last_ia_header.line + 1
+		local fold_end = total_lines - 1
+
+		for j = last_ia_header_index + 1, #headers do
+			local next_header = headers[j]
+			fold_end = next_header.line - 1
+			break
+		end
+
+		if fold_start <= fold_end then
+			vim.api.nvim_buf_call(buf, function()
+				vim.cmd(string.format("%dfoldopen!", fold_start + 1)) -- Abre recursivamente
+			end)
+		end
+	end
+
+	vim.cmd('normal! G')
+	vim.cmd('normal! zz')
 end
 
 M.update_api_display = function()

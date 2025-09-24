@@ -122,6 +122,9 @@ function M.SendFromPopup()
 					-- Aplicar highlights novamente para incluir as novas linhas
 					utils.apply_highlights(buf)
 
+					-- Recriar as folds
+					popup.create_folds(buf)
+
 					if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
 						api.nvim_win_set_cursor(popup.popup_win, { api.nvim_buf_line_count(buf), #"## Nardi >> " })
 					end
