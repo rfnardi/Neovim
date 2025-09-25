@@ -51,7 +51,26 @@ function M.SendFromPopup()
 	table.insert(M.history, { user = user_text, ai = nil })
 
 	-- Obter TODO o conteúdo do popup (contexto + histórico)
-	local full_context = utils.get_popup_content(buf)
+	
+	local function clean_text(text)
+		if not text then return "" end
+		
+		-- Filtra caracteres manualmente
+		local result = {}
+		for i = 1, #text do
+			local char = text:sub(i, i)
+			local byte = char:byte()
+			
+			-- Mantém caracteres imprimíveis ASCII (32-126) e quebras de linha (10, 13)
+			if byte >= 32 and byte <= 126 or byte == 10 or byte == 13 or byte == 9 then
+				table.insert(result, char)
+			end
+		end
+		
+		return table.concat(result)
+	end
+
+	local full_context = clean_text(utils.get_popup_content(buf))
 
 	-- Construir mensagens para a API
 	local messages = {}
