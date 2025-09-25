@@ -19,6 +19,15 @@ M.ContextChatFolder = function()
 	popup.open_popup(text, text)
 end
 
+M.ContextChatRepo = function()
+    local text = utils.read_repo_context()
+    if text == "" then
+        return
+    end
+    popup.open_popup(text, text)
+end
+
+
 M.ContextChatGit = function()
 	local diff_text, error_msg = utils.get_git_diff()
 	if error_msg then
