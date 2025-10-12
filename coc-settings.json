@@ -15,6 +15,7 @@
     ".venv",
     "__pycache__",
     "venv"
-  ]
+  ],
+  "snippets.ultisnips.pythonPrompt": false
 }
 

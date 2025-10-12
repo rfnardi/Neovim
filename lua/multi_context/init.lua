@@ -60,13 +60,35 @@ function M.SendFromPopup()
 		for i = 1, #text do
 			local char = text:sub(i, i)
 			local byte = char:byte()
-			
+
 			-- Mantém caracteres imprimíveis ASCII (32-126) e quebras de linha (10, 13)
 			if byte >= 32 and byte <= 126 or byte == 10 or byte == 13 or byte == 9 then
 				table.insert(result, char)
+				-- Converte caracteres com acentos para suas versões básicas
+			elseif byte == 195 then -- Caracteres especiais começam com 0xC3 em UTF-8
+				local next_byte = text:sub(i+1, i+1):byte()
+				local mapping = {
+					[128] = "A", [129] = "A", [130] = "A", [131] = "A", -- À Á Â Ã
+					[132] = "A", [133] = "A", [134] = "A", [135] = "C", -- Ä Å Æ Ç
+					[136] = "E", [137] = "E", [138] = "E", [139] = "E", -- È É Ê Ë
+					[140] = "I", [141] = "I", [142] = "I", [143] = "I", -- Ì Í Î Ï
+					[144] = "D", [145] = "N", [146] = "O", [147] = "O", -- Ñ Ò Ó Ô
+					[148] = "O", [149] = "O", [150] = "O", [151] = "O", -- Õ Ö × Ø
+					[152] = "U", [153] = "U", [154] = "U", [155] = "U", -- Ù Ú Û Ü
+					[160] = "a", [161] = "a", [162] = "a", [163] = "a", -- à á â ã
+					[164] = "a", [165] = "a", [166] = "a", [167] = "c", -- ä å æ ç
+					[168] = "e", [169] = "e", [170] = "e", [171] = "e", -- è é ê ë
+					[172] = "i", [173] = "i", [174] = "i", [175] = "i", -- ì í î ï
+					[176] = "d", [177] = "n", [178] = "o", [179] = "o", -- ñ ò ó ô
+					[180] = "o", [181] = "o", [182] = "o", [183] = "o", -- õ ö ÷ ø
+					[184] = "u", [185] = "u", [186] = "u", [187] = "u"  -- ù ú û ü
+				}
+				if mapping[next_byte] then
+					table.insert(result, mapping[next_byte])
+				end
+				i = i + 1 -- Pula o próximo byte pois já processamos este caractere de 2 bytes
 			end
-		end
-		
+		end	
 		return table.concat(result)
 	end
 
