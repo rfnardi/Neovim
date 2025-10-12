@@ -1,8 +1,16 @@
-local api = vim.api  -- Adicione esta linha no topo do arquivo
+local api = vim.api
 local utils = require('multi_context.utils')
 local popup = require('multi_context.popup')
 
 local M = {}
+
+M.ContextTree = function()
+    local text = utils.read_tree_context() -- Cria funcao nova no utils
+    if text == "" then
+        return
+    end
+    popup.open_popup(text, text)
+end
 
 M.ContextChatFull = function()
 	local text = utils.get_full_buffer()

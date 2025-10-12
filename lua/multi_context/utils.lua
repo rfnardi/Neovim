@@ -528,4 +528,105 @@ M.get_current_api = function()
 	return api_config.default_api or "Nenhuma API selecionada"
 end
 
+
+M.read_tree_context = function()
+	local cur_file = api.nvim_buf_get_name(0)
+	if cur_file == "" then return "" end
+	local start_dir = vim.fn.fnamemodify(cur_file, ":h")
+
+	local context_lines = {}
+
+	-- Adicionar a estrutura de diretórios (árvore)
+	table.insert(context_lines, "=== Estrutura de diretórios a partir de " .. start_dir .. ":")
+
+	local function list_files(dir, indent)
+		local files = {}
+		local items = vim.fn.readdir(dir)
+
+		-- Ordenar: diretorios primeiro, depois arquivos
+		local dirs = {}
+		local files_list = {}
+
+		for _, item in ipairs(items) do
+			if item ~= ".git" and M.should_include_file(item) then
+				local full_path = dir .. '/' .. item
+				if vim.fn.isdirectory(full_path) == 1 then
+					table.insert(dirs, item)
+				else
+					table.insert(files_list, item)
+				end
+			end
+		end
+
+		-- Ordenar alfabeticamente
+		table.sort(dirs)
+		table.sort(files_list)
+
+		-- Adicionar diretorios
+		for _, dir_name in ipairs(dirs) do
+			local full_path = dir .. '/' .. dir_name
+			table.insert(files, {name = dir_name, is_dir = true, path = full_path})
+		end
+
+		-- Adicionar arquivos
+		for _, file_name in ipairs(files_list) do
+			local full_path = dir .. '/' .. file_name
+			table.insert(files, {name = file_name, is_dir = false, path = full_path})
+		end
+
+		return files
+	end
+
+	local function build_tree(dir, indent, base_indent)
+		indent = indent or ""
+		base_indent = base_indent or ""
+		local files = list_files(dir)
+
+		for i, item in ipairs(files) do
+			local is_last = i == #files
+			local connector = is_last and " " or " "
+
+			if item.is_dir then
+				table.insert(context_lines, base_indent .. indent .. connector .. item.name .. "/")
+				local new_indent = indent .. (is_last and "    " or "   ")
+				build_tree(item.path, new_indent, base_indent)
+			else
+				table.insert(context_lines, base_indent .. indent .. connector .. item.name)
+			end
+		end
+	end
+
+	build_tree(start_dir, "", "")
+	table.insert(context_lines, "")
+
+	-- Adicionar o conteúdo dos arquivos
+    table.insert(context_lines, "=== Conteúdo dos arquivos na árvore:")
+
+    local function read_file_contents(dir)
+        local files = list_files(dir) -- Obtem arquivos filtrados
+
+        for _, item in ipairs(files) do
+            if not item.is_dir then
+                local full_path = item.path
+                local header = "== Arquivo: " .. item.name
+                table.insert(context_lines, header)
+
+                local success, lines = pcall(vim.fn.readfile, full_path)
+                if success then
+                    vim.list_extend(context_lines, lines)
+                else
+                    table.insert(context_lines, "-- Nao foi possivel ler o arquivo --")
+                end
+                table.insert(context_lines, "")
+            elseif item.is_dir then
+                read_file_contents(item.path) -- Recursivamente ler o conteudo dos arquivos
+            end
+        end
+    end
+
+    read_file_contents(start_dir)
+
+    return table.concat(context_lines, "\n")
+end
+
 return M
