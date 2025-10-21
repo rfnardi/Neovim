@@ -34,6 +34,11 @@ command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
 command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
 command! -nargs=0 ContextTree lua require("multi_context").ContextTree()
 
+" Comando para toggle do popup
+command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
+
+nnoremap <A-h> :lua require('multi_context').TogglePopup()<CR>
+inoremap <A-h> <Esc>:lua require('multi_context').TogglePopup()<CR>a
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim

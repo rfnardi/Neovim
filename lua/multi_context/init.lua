@@ -20,7 +20,72 @@ M.ContextChatRepo = commands.ContextChatRepo
 M.ContextChatGit = commands.ContextChatGit
 M.ContextApis = commands.ContextApis
 M.ContextTree = commands.ContextTree
+M.TogglePopup = commands.TogglePopup
 
+
+-- Variável para controlar o estado do popup
+M.popup_visible = false
+
+-- Função para alternar o popup
+M.TogglePopup = function()
+    if M.popup_visible then
+        M.HidePopup()
+    else
+        M.ShowPopup()
+    end
+end
+
+-- Função para esconder o popup
+M.HidePopup = function()
+    if M.popup_win and api.nvim_win_is_valid(M.popup_win) then
+        api.nvim_win_hide(M.popup_win)
+        M.popup_visible = false
+    end
+end
+
+-- Função para mostrar o popup
+M.ShowPopup = function()
+    if M.popup_buf and api.nvim_buf_is_valid(M.popup_buf) then
+        if not M.popup_win or not api.nvim_win_is_valid(M.popup_win) then
+            -- Recriar a janela se não for mais válida
+            local width = math.floor(vim.o.columns * 0.7)
+            local height = math.floor(vim.o.lines * 0.7)
+            local row = math.floor((vim.o.lines - height) / 2)
+            local col = math.floor((vim.o.columns - width) / 2)
+
+            M.popup_win = api.nvim_open_win(M.popup_buf, true, {
+                relative = "editor",
+                width = width,
+                height = height,
+                row = row,
+                col = col,
+                style = "minimal",
+                border = "rounded",
+                title = " MultiContext - Chat ",
+                title_pos = "center",
+            })
+
+            -- Reposicionar o cursor
+            local lines = api.nvim_buf_get_lines(M.popup_buf, 0, -1, false)
+            api.nvim_win_set_cursor(M.popup_win, { #lines, #"## Nardi >> " })
+            vim.cmd('normal! zz')
+        else
+            api.nvim_win_set_config(M.popup_win, { focusable = true })
+        end
+        M.popup_visible = true
+    else
+        vim.notify("Popup não foi aberto ainda. Use :Context, :ContextRange ou :ContextFolder primeiro.", vim.log.levels.WARN)
+    end
+end
+
+-- Modificar a função open_popup para atualizar o estado
+local original_open_popup = popup.open_popup
+popup.open_popup = function(text, context_text)
+    original_open_popup(text, context_text)
+    M.popup_buf = popup.popup_buf
+    M.popup_win = popup.popup_win
+    M.popup_visible = true
+end
 
 -- ======================================================
 -- Envio para LLM

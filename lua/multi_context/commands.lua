@@ -67,4 +67,8 @@ M.ContextChatHandler = function(start_line, end_line)
 	end
 end
 
+M.TogglePopup = function()
+  require('multi_context').TogglePopup()
+end
+
 return M
