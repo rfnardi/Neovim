@@ -71,4 +71,27 @@ M.TogglePopup = function()
   require('multi_context').TogglePopup()
 end
 
+M.ContextBuffers = function()
+  local all_buffers_text = {}
+  local buffers = api.nvim_list_bufs()
+
+  for _, buf in ipairs(buffers) do
+    if api.nvim_buf_is_loaded(buf) then
+      local buf_name = api.nvim_buf_get_name(buf)
+      if buf_name ~= "" then -- Ignora buffers "especiais"
+        local line_count = api.nvim_buf_line_count(buf)
+        local lines = api.nvim_buf_get_lines(buf, 0, line_count, false)
+        local content = table.concat(lines, "\n")
+
+        table.insert(all_buffers_text, "== Buffer: " .. buf_name .. " ==")
+        table.insert(all_buffers_text, content)
+        table.insert(all_buffers_text, "") -- Adiciona uma linha em branco entre os buffers
+      end
+    end
+  end
+
+  local combined_text = table.concat(all_buffers_text, "\n")
+  popup.open_popup(combined_text, combined_text)
+end
+
 return M

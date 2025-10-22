@@ -21,7 +21,7 @@ M.ContextChatGit = commands.ContextChatGit
 M.ContextApis = commands.ContextApis
 M.ContextTree = commands.ContextTree
 M.TogglePopup = commands.TogglePopup
-
+M.ContextBuffers = commands.ContextBuffers
 
 -- Variável para controlar o estado do popup
 M.popup_visible = false
