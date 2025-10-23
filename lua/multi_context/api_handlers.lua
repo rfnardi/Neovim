@@ -23,7 +23,6 @@ M.openai = {
 		local api_key = api_keys[api_config.name] or "" -- Pega a chave uma vez
 
 		for k, v in pairs(api_config.headers or {}) do
-			-- CORREÇÃO: Usa gsub para substituir o placeholder em vez de comparar a string inteira
 			local final_header_value = string.gsub(v, "{API_KEY}", api_key)
 			table.insert(headers, "-H")
 			table.insert(headers, k .. ": " .. final_header_value)
@@ -32,9 +31,6 @@ M.openai = {
 		local cmd = vim.list_extend({"curl", "-s", "-X", "POST", api_config.url}, headers)
 		table.insert(cmd, "-d")
 		table.insert(cmd, json_payload)
-
-		-- Adicione esta linha para depuração final
-		-- print("DEBUG - Comando Curl Final:", table.concat(cmd, " "))
 
 		local stdout_accum = {}
 		local stderr_accum = {}
@@ -75,12 +71,10 @@ M.openai = {
 			return nil, "Erro ao decodificar JSON da resposta: " .. tostring(response_text)
 		end
 
-		-- Verificar se há erro na resposta
 		if decoded.error then
 			return nil, decoded.error.message or "Erro na API: " .. tostring(decoded.error)
 		end
 
-		-- Tentar diferentes estruturas de resposta
 		if decoded.choices and decoded.choices[1] then
 			local choice = decoded.choices[1]
 			if choice.message and choice.message.content then
@@ -88,7 +82,6 @@ M.openai = {
 			end
 		end
 
-		-- Estrutura alternativa do Open Router
 		if decoded.result then
 			if type(decoded.result) == "string" then
 				return decoded.result, nil
@@ -100,7 +93,6 @@ M.openai = {
 			end
 		end
 
-		-- Última tentativa: procurar conteúdo em outras estruturas comuns
 		if decoded.content then
 			return decoded.content, nil
 		end
@@ -111,7 +103,6 @@ M.openai = {
 
 M.gemini = {
 	make_request = function(api_config, messages, api_keys, callback)
-		-- Converter mensagens para formato Gemini
 		local gemini_messages = {}
 		for _, msg in ipairs(messages) do
 			table.insert(gemini_messages, {
@@ -129,12 +120,11 @@ M.gemini = {
 		})
 
 		local headers = {}
+		local api_key = api_keys[api_config.name] or ""
 		for k, v in pairs(api_config.headers or {}) do
-			if v == "{API_KEY}" then
-				v = api_keys[api_config.name] or ""
-			end
+			local final_header_value = string.gsub(v, "{API_KEY}", api_key)
 			table.insert(headers, "-H")
-			table.insert(headers, k .. ": " .. v)
+			table.insert(headers, k .. ": " .. final_header_value)
 		end
 
 		local cmd = vim.list_extend({"curl", "-s", "-X", "POST", api_config.url}, headers)
@@ -180,12 +170,10 @@ M.gemini = {
 			return nil, "Erro ao decodificar JSON da resposta Gemini"
 		end
 
-		-- Verificar se há erro na resposta
 		if decoded.error then
 			return nil, decoded.error.message or "Erro na API Gemini"
 		end
 
-		-- Verificar a estrutura da resposta
 		if not decoded.candidates or not decoded.candidates[1] then
 			return nil, "Resposta da Gemini sem candidatos"
 		end
@@ -206,12 +194,11 @@ M.cloudflare = {
 		})
 
 		local headers = {}
+		local api_key = api_keys[api_config.name] or ""
 		for k, v in pairs(api_config.headers or {}) do
-			if v == "{API_KEY}" then
-				v = api_keys[api_config.name] or ""
-			end
+			local final_header_value = string.gsub(v, "{API_KEY}", api_key)
 			table.insert(headers, "-H")
-			table.insert(headers, k .. ": " .. v)
+			table.insert(headers, k .. ": " .. final_header_value)
 		end
 
 		local cmd = vim.list_extend({"curl", "-s", "-X", "POST", api_config.url}, headers)

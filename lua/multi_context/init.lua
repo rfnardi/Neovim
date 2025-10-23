@@ -110,83 +110,55 @@ function M.SendFromPopup()
 		return
 	end
 
-	-- marca envio
-	api.nvim_buf_set_lines(buf, -1, -1, false, { "[mensagem enviada]" })
-	vim.notify("mensagem enviada", vim.log.levels.INFO)
+	-- Adiciona marcador de envio no buffer
+	api.nvim_buf_set_lines(buf, -1, -1, false, { "[Enviando requisição...]" })
 
 	table.insert(M.history, { user = user_text, ai = nil })
-
-	-- Obter TODO o conteúdo do popup (contexto + histórico)
 	
 	local function clean_text(text)
 		if not text then return "" end
-		
-		-- Filtra caracteres manualmente
 		local result = {}
 		for i = 1, #text do
 			local char = text:sub(i, i)
 			local byte = char:byte()
-
-			-- Mantém caracteres imprimíveis ASCII (32-126) e quebras de linha (10, 13)
 			if byte >= 32 and byte <= 126 or byte == 10 or byte == 13 or byte == 9 then
 				table.insert(result, char)
-				-- Converte caracteres com acentos para suas versões básicas
-			elseif byte == 195 then -- Caracteres especiais começam com 0xC3 em UTF-8
+			elseif byte == 195 then 
 				local next_byte = text:sub(i+1, i+1):byte()
 				local mapping = {
-					[128] = "A", [129] = "A", [130] = "A", [131] = "A", -- À Á Â Ã
-					[132] = "A", [133] = "A", [134] = "A", [135] = "C", -- Ä Å Æ Ç
-					[136] = "E", [137] = "E", [138] = "E", [139] = "E", -- È É Ê Ë
-					[140] = "I", [141] = "I", [142] = "I", [143] = "I", -- Ì Í Î Ï
-					[144] = "D", [145] = "N", [146] = "O", [147] = "O", -- Ñ Ò Ó Ô
-					[148] = "O", [149] = "O", [150] = "O", [151] = "O", -- Õ Ö × Ø
-					[152] = "U", [153] = "U", [154] = "U", [155] = "U", -- Ù Ú Û Ü
-					[160] = "a", [161] = "a", [162] = "a", [163] = "a", -- à á â ã
-					[164] = "a", [165] = "a", [166] = "a", [167] = "c", -- ä å æ ç
-					[168] = "e", [169] = "e", [170] = "e", [171] = "e", -- è é ê ë
-					[172] = "i", [173] = "i", [174] = "i", [175] = "i", -- ì í î ï
-					[176] = "d", [177] = "n", [178] = "o", [179] = "o", -- ñ ò ó ô
-					[180] = "o", [181] = "o", [182] = "o", [183] = "o", -- õ ö ÷ ø
-					[184] = "u", [185] = "u", [186] = "u", [187] = "u"  -- ù ú û ü
+					[128] = "A", [129] = "A", [130] = "A", [131] = "A", [132] = "A", [133] = "A", [134] = "A", [135] = "C", [136] = "E", [137] = "E", [138] = "E", [139] = "E", [140] = "I", [141] = "I", [142] = "I", [143] = "I", [144] = "D", [145] = "N", [146] = "O", [147] = "O", [148] = "O", [149] = "O", [150] = "O", [151] = "O", [152] = "U", [153] = "U", [154] = "U", [155] = "U", [160] = "a", [161] = "a", [162] = "a", [163] = "a", [164] = "a", [165] = "a", [166] = "a", [167] = "c", [168] = "e", [169] = "e", [170] = "e", [171] = "e", [172] = "i", [173] = "i", [174] = "i", [175] = "i", [176] = "d", [177] = "n", [178] = "o", [179] = "o", [180] = "o", [181] = "o", [182] = "o", [183] = "o", [184] = "u", [185] = "u", [186] = "u", [187] = "u"
 				}
-				if mapping[next_byte] then
-					table.insert(result, mapping[next_byte])
-				end
-				i = i + 1 -- Pula o próximo byte pois já processamos este caractere de 2 bytes
+				if mapping[next_byte] then table.insert(result, mapping[next_byte]) end
+				i = i + 1 
 			end
-		end	
+		end
 		return table.concat(result)
 	end
 
 	local full_context = clean_text(utils.get_popup_content(buf))
-
-	-- Construir mensagens para a API
-	local messages = {}
-
-	-- Adicionar todo o contexto do popup como mensagem de sistema
-	table.insert(messages, { role = "system", content = full_context })
-
-	-- Adicionar apenas a última mensagem do usuário (o que foi digitado após ## Nardi >>)
-	table.insert(messages, { role = "user", content = user_text })
-
-	-- Carregar configurações das APIs
+	local messages = {
+		{ role = "system", content = full_context },
+		{ role = "user", content = user_text }
+	}
+	
 	local api_config = utils.load_api_config()
 	if not api_config then
 		vim.notify("Arquivo de configuração das APIs não encontrado", vim.log.levels.ERROR)
 		return
 	end
 
-	-- Carregar chaves de API
 	local api_keys = utils.load_api_keys()
-
 	local selected_api = api_config.default_api
 	local fallback_mode = api_config.fallback_mode or false
 	local apis = api_config.apis or {}
 
-	-- Função para tentar a próxima API em caso de falha
 	local function try_apis(api_list, index)
 		if index > #api_list then
-			vim.notify("Todas as APIs falharam", vim.log.levels.ERROR)
+			vim.notify("Todas as APIs falharam.", vim.log.levels.ERROR)
+			vim.schedule(function()
+				local last_line_idx = api.nvim_buf_line_count(buf) - 1
+				api.nvim_buf_set_lines(buf, last_line_idx, last_line_idx + 1, false, {"## Nardi >> "})
+			end)
 			return
 		end
 
@@ -194,21 +166,23 @@ function M.SendFromPopup()
 		local handler = api_handlers[current_api.api_type or "openai"]
 
 		if not handler then
-			vim.notify("Tipo de API não suportado: " .. (current_api.api_type or "unknown"), vim.log.levels.ERROR)
-			if fallback_mode then
-				try_apis(api_list, index + 1)
-			end
+			vim.notify("Tipo de API não suportado para " .. current_api.name .. ". Pulando.", vim.log.levels.ERROR)
+			if fallback_mode then try_apis(api_list, index + 1) end
 			return
 		end
+		
+		local attempt_message = "Mensagem enviada para " .. current_api.name
+		if fallback_mode and #api_list > 1 then
+			attempt_message = attempt_message .. " (" .. index .. "/" .. #api_list .. ")"
+		end
+		vim.notify(attempt_message, vim.log.levels.INFO)
 
 		handler.make_request(current_api, messages, api_keys, function(success, result)
 			if success then
 				local ai_content, error_msg = handler.parse_response(result)
 				if not ai_content then
-					vim.notify("Erro ao processar resposta: " .. error_msg, vim.log.levels.ERROR)
-					if fallback_mode then
-						try_apis(api_list, index + 1)
-					end
+					vim.notify("Erro ao processar resposta da " .. current_api.name .. ": " .. error_msg, vim.log.levels.ERROR)
+					if fallback_mode then try_apis(api_list, index + 1) end
 					return
 				end
 
@@ -216,27 +190,23 @@ function M.SendFromPopup()
 				M.history[#M.history].ai = ai_content
 
 				vim.schedule(function()
-					local last_line = api.nvim_buf_line_count(buf) - 1
+					local final_line_idx = api.nvim_buf_line_count(buf) - 1 -- Index of "[Enviando...]"
 					local ai_lines = utils.split_lines(ai_content)
-
-					-- Inserir a resposta da IA
-					utils.insert_after(buf, last_line, ai_lines)
-
-					-- Inserir a linha da API atual e o novo prompt
-					local current_api_name = current_api and current_api.name or "API desconhecida"
-					utils.insert_after(buf, -1, { "## API atual: " .. current_api_name, "## Nardi >> " })
-
-					-- Aplicar highlights novamente para incluir as novas linhas
+					
+					-- Substitui a linha de status pela resposta da IA
+					api.nvim_buf_set_lines(buf, final_line_idx, final_line_idx + 1, false, ai_lines)
+					
+					-- Adiciona a linha da API e o novo prompt no final
+					utils.insert_after(buf, -1, { "## API atual: " .. current_api.name, "## Nardi >> " })
+					
 					utils.apply_highlights(buf)
-
-					-- Recriar as folds
 					popup.create_folds(buf)
 
 					if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
 						api.nvim_win_set_cursor(popup.popup_win, { api.nvim_buf_line_count(buf), #"## Nardi >> " })
 					end
 					vim.cmd("normal! zz")
-					vim.notify("mensagem recebida de " .. (current_api and current_api.name or "API desconhecida"), vim.log.levels.INFO)
+					vim.notify("Mensagem recebida de " .. current_api.name, vim.log.levels.INFO)
 				end)
 			else
 				vim.notify("API " .. current_api.name .. " falhou: " .. result, vim.log.levels.WARN)
@@ -247,12 +217,17 @@ function M.SendFromPopup()
 		end)
 	end
 
-	-- Determinar qual API(s) usar
 	local api_list = {}
 	if fallback_mode then
-		api_list = apis
+		for _, api in ipairs(apis) do
+			if api['include_in_fall-back_mode'] == true then
+				table.insert(api_list, api)
+			end
+		end
+		if #api_list == 0 then
+			vim.notify("Modo fallback ativo, mas nenhuma API marcada para inclusão.", vim.log.levels.WARN)
+		end
 	else
-		-- Encontrar a API pelo nome
 		for _, api in ipairs(apis) do
 			if api.name == selected_api then
 				api_list = {api}
@@ -260,15 +235,15 @@ function M.SendFromPopup()
 			end
 		end
 		if #api_list == 0 and #apis > 0 then
+			vim.notify("API '" .. selected_api .. "' nao encontrada. Usando a primeira API da lista.", vim.log.levels.WARN)
 			api_list = {apis[1]}
 		end
 	end
 
-	-- Fazer a requisição
 	if #api_list > 0 then
 		try_apis(api_list, 1)
 	else
-		vim.notify("Nenhuma API configurada", vim.log.levels.ERROR)
+		vim.notify("Nenhuma API configurada ou disponível para a requisição.", vim.log.levels.ERROR)
 	end
 end
 

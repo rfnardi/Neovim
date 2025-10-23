@@ -498,7 +498,7 @@ M.set_selected_api = function(api_name)
 
 	-- Verifica se a API existe
 	local api_exists = false
-	for _, api in ipairs(api_config.apis) do
+	for _, api in ipairs(api_config.apis or {}) do
 		if api.name == api_name then
 			api_exists = true
 			break
@@ -507,11 +507,18 @@ M.set_selected_api = function(api_name)
 
 	if api_exists then
 		api_config.default_api = api_name
-		-- Salva a configuração atualizada
+		-- Salva a configuracao atualizada
 		local config_path = vim.fn.expand('~/.config/nvim/context_apis.json')
 		local file = io.open(config_path, 'w')
 		if file then
-			file:write(vim.fn.json_encode(api_config))
+			-- Tenta codificar com formatacao. Em versoes mais antigas do Neovim,
+			-- isso pode nao ser suportado, entao usamos um pcall para segurança.
+			local ok, json_string = pcall(vim.fn.json_encode, api_config, { pretty = true, indent = "  " })
+			if not ok then
+				-- Fallback para o metodo sem formatacao se o primeiro falhar
+				json_string = vim.fn.json_encode(api_config)
+			end
+			file:write(json_string)
 			file:close()
 			return true
 		end
