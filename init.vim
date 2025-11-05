@@ -1,4 +1,48 @@
 "---------------------------------------------
+" 				Providers
+"---------------------------------------------
+
+let g:python3_host_prog = '/usr/bin/python3'
+let g:loaded_ruby_provider = 0 " não carrega o provedor de ruby (não uso isso)
+let g:loaded_perl_provider = 0 " não carrega o provedor perl
+
+"---------------------------------------------
+" 				Checagem de rede
+"---------------------------------------------
+"
+function! CheckNetwork()
+  " Testa conexão rápida com o registro do npm (usado pelo coc.nvim)
+  let l:status = system('ping -c 1 registry.npmjs.org > /dev/null 2>&1 && echo 1 || echo 0')
+  return l:status ==# "1\n"
+endfunction
+
+"---------------------------------------------
+" 				Extensões do coc.nvim
+"---------------------------------------------
+"
+if CheckNetwork()
+  echo "🌐 Rede detectada — verificando extensões do coc.nvim..."
+  let g:coc_global_extensions = [
+    \ 'coc-json',
+    \ 'coc-pyright',
+    \ 'coc-texlab',
+    \ 'coc-html',
+    \ 'coc-clangd',
+    \ 'coc-cmake',
+    \ 'coc-sh',
+    \ 'coc-tsserver',
+    \ 'coc-snippets',
+    \ 'coc-yank',
+    \ 'coc-highlight',
+    \ 'coc-vimlsp',
+    \ 'coc-calc',
+    \ 'coc-jedi'
+    \ ]
+else
+  echo "⚠️ Sem conexão: extensões coc não serão verificadas agora."
+endif
+
+"---------------------------------------------
 " 				Plugins
 "---------------------------------------------
 
@@ -23,7 +67,6 @@ Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
 call plug#end()
-
 
 " Multi-Context:
 lua require('multi_context')
@@ -66,9 +109,6 @@ set background=dark
 
 " autocmd vimenter * NERDTree
 " let g:NERDTreeGitStatusWithFlags = 1
-"
-let g:loaded_ruby_provider = 0 " não carrega o provedor de ruby (não uso isso)
-let g:loaded_perl_provider = 0 " não carrega o provedor perl
 
 set noswapfile
 set hidden                  " permite abrir outro buffer mesmo sem salvar o arquivo atual

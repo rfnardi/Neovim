@@ -152,7 +152,7 @@ function M.SendFromPopup()
 	local fallback_mode = api_config.fallback_mode or false
 	local apis = api_config.apis or {}
 
-	local function try_apis(api_list, index)
+	local function try_apis(api_list, index, attempt_num)
 		if index > #api_list then
 			vim.notify("Todas as APIs falharam.", vim.log.levels.ERROR)
 			vim.schedule(function()
@@ -162,7 +162,9 @@ function M.SendFromPopup()
 			return
 		end
 
+		attempt_num = attempt_num or 1 -- Garante que a tentativa comece em 1
 		local current_api = api_list[index]
+		local num_tries = current_api.num_tries or 1 -- Pega o número de tentativas do JSON, ou 1 como padrão
 		local handler = api_handlers[current_api.api_type or "openai"]
 
 		if not handler then
@@ -173,7 +175,9 @@ function M.SendFromPopup()
 		
 		local attempt_message = "Mensagem enviada para " .. current_api.name
 		if fallback_mode and #api_list > 1 then
-			attempt_message = attempt_message .. " (" .. index .. "/" .. #api_list .. ")"
+			if num_tries > 1 then
+				attempt_message = attempt_message .. " (tentativa " .. attempt_num .. "/" .. num_tries .. ")"
+			end
 		end
 		vim.notify(attempt_message, vim.log.levels.INFO)
 
@@ -181,8 +185,14 @@ function M.SendFromPopup()
 			if success then
 				local ai_content, error_msg = handler.parse_response(result)
 				if not ai_content then
-					vim.notify("Erro ao processar resposta da " .. current_api.name .. ": " .. error_msg, vim.log.levels.ERROR)
-					if fallback_mode then try_apis(api_list, index + 1) end
+					local parse_error_msg = "Erro ao processar resposta da " .. current_api.name .. ": " .. error_msg
+					vim.notify(parse_error_msg, vim.log.levels.ERROR)
+					-- Trata o erro de parse como uma falha para permitir nova tentativa
+					if attempt_num < num_tries then
+						try_apis(api_list, index, attempt_num + 1)
+					elseif fallback_mode then
+						try_apis(api_list, index + 1, 1)
+					end
 					return
 				end
 
@@ -190,13 +200,10 @@ function M.SendFromPopup()
 				M.history[#M.history].ai = ai_content
 
 				vim.schedule(function()
-					local final_line_idx = api.nvim_buf_line_count(buf) - 1 -- Index of "[Enviando...]"
+					local final_line_idx = api.nvim_buf_line_count(buf) - 1
 					local ai_lines = utils.split_lines(ai_content)
 					
-					-- Substitui a linha de status pela resposta da IA
 					api.nvim_buf_set_lines(buf, final_line_idx, final_line_idx + 1, false, ai_lines)
-					
-					-- Adiciona a linha da API e o novo prompt no final
 					utils.insert_after(buf, -1, { "## API atual: " .. current_api.name, "## Nardi >> " })
 					
 					utils.apply_highlights(buf)
@@ -209,15 +216,22 @@ function M.SendFromPopup()
 					vim.notify("Mensagem recebida de " .. current_api.name, vim.log.levels.INFO)
 				end)
 			else
-				vim.notify("API " .. current_api.name .. " falhou: " .. result, vim.log.levels.WARN)
-				if fallback_mode then
-					try_apis(api_list, index + 1)
+				-- Lógica de falha com retentativas
+				local failure_msg = "API " .. current_api.name .. " falhou (tentativa " .. attempt_num .. "/" .. num_tries .. "): " .. result
+				vim.notify(failure_msg, vim.log.levels.WARN)
+				
+				if attempt_num < num_tries then
+					-- Tenta novamente com a mesma API
+					try_apis(api_list, index, attempt_num + 1)
+				elseif fallback_mode then
+					-- Passa para a próxima API da lista de fallback
+					try_apis(api_list, index + 1, 1)
 				end
 			end
 		end)
 	end
 
-	local api_list = {}
+local api_list = {}
 	if fallback_mode then
 		for _, api in ipairs(apis) do
 			if api['include_in_fall-back_mode'] == true then
@@ -241,10 +255,11 @@ function M.SendFromPopup()
 	end
 
 	if #api_list > 0 then
-		try_apis(api_list, 1)
+		try_apis(api_list, 1, 1) -- A chamada inicial agora inclui o número da tentativa
 	else
 		vim.notify("Nenhuma API configurada ou disponível para a requisição.", vim.log.levels.ERROR)
 	end
+
 end
 
 return M

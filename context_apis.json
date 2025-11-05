@@ -1,6 +1,6 @@
 {
   "default_api": "google_gemini_2.5-pro",
-  "fallback_mode": true,
+  "fallback_mode": false,
   "apis": [
     {
       "headers": {
@@ -11,7 +11,8 @@
       "name": "open_router_deep_seek",
       "model": "deepseek/deepseek-r1-0528:free",
       "include_in_fall-back_mode": true,
-      "api_type": "openai"
+      "api_type": "openai",
+			"num_tries": 2 
     },
     {
       "headers": {
@@ -22,7 +23,8 @@
       "name": "open_router_qwen3-coder",
       "model": "qwen/qwen3-coder:free",
       "include_in_fall-back_mode": true,
-      "api_type": "openai"
+      "api_type": "openai",
+			"num_tries": 2 
     },
     {
       "headers": {
@@ -32,7 +34,8 @@
       "name": "ollama_local",
       "model": "codellama:7b-instruct",
       "include_in_fall-back_mode": false,
-      "api_type": "openai"
+      "api_type": "openai",
+			"num_tries": 3 
     },
     {
       "headers": {
@@ -43,7 +46,8 @@
       "name": "openai",
       "model": "gpt-3.5-turbo",
       "include_in_fall-back_mode": false,
-      "api_type": "openai"
+      "api_type": "openai",
+			"num_tries": 3 
     },
     {
       "headers": {
@@ -54,7 +58,8 @@
       "name": "google_gemini_2.0-flash",
       "model": "gemini-2.0-flash",
       "include_in_fall-back_mode": true,
-      "api_type": "gemini"
+      "api_type": "gemini",
+			"num_tries": 3 
     },
     {
       "headers": {
@@ -65,7 +70,8 @@
       "name": "google_gemini_2.5-flash",
       "model": "gemini-2.5-flash",
       "include_in_fall-back_mode": true,
-      "api_type": "gemini"
+      "api_type": "gemini",
+			"num_tries": 2 
     },
     {
       "headers": {
@@ -76,7 +82,8 @@
       "name": "google_gemini_2.5-pro",
       "model": "gemini-2.5-pro",
       "include_in_fall-back_mode": true,
-      "api_type": "gemini"
+      "api_type": "gemini",
+			"num_tries": 5 
     },
     {
       "headers": {
@@ -87,7 +94,8 @@
       "name": "groq",
       "model": "llama3-8b-8192",
       "include_in_fall-back_mode": false,
-      "api_type": "openai"
+      "api_type": "openai",
+			"num_tries": 1 
     },
     {
       "headers": {
@@ -98,7 +106,8 @@
       "name": "deepseek",
       "model": "deepseek-chat",
       "include_in_fall-back_mode": false,
-      "api_type": "openai"
+      "api_type": "openai",
+			"num_tries": 3 
     },
     {
       "headers": {
@@ -109,7 +118,8 @@
       "name": "cloudflare",
       "model": "@cf/meta/llama-3-8b-instruct",
       "include_in_fall-back_mode": false,
-      "api_type": "cloudflare"
+      "api_type": "cloudflare",
+			"num_tries": 3 
     }
   ]
 }

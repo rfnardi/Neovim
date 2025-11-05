@@ -1,7 +1,6 @@
 "minhas extensões do coc mais usadas
 
 :CocInstall coc-json
-":CocInstall coc-python
 :CocInstall coc-texlab
 :CocInstall coc-html
 :CocInstall coc-clangd
