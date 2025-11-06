@@ -47,6 +47,9 @@ M.open_popup = function(text, context_text)
 	api.nvim_buf_set_keymap(buf, "i", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
 	api.nvim_buf_set_keymap(buf, "n", "<C-s>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", { noremap=true, silent=true })
 
+api.nvim_buf_set_keymap(buf, "i", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", { noremap=true, silent=true })
+	api.nvim_buf_set_keymap(buf, "n", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", { noremap=true, silent=true })
+
 	-- Aplicar highlights iniciais
 	utils.apply_highlights(buf)
 

@@ -636,4 +636,19 @@ M.read_tree_context = function()
     return table.concat(context_lines, "\n")
 end
 
+M.generate_chat_filename = function()
+	local date_str = os.date("%d_%m_%Y")
+	local i = 1
+	local filename
+
+	while true do
+		filename = string.format("chat_%s_%d.md", date_str, i)
+		-- Procura o arquivo no diretório de trabalho atual
+		if vim.fn.filereadable(vim.fn.getcwd() .. "/" .. filename) == 0 then
+			return filename
+		end
+		i = i + 1
+	end
+end
+
 return M

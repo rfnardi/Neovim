@@ -10,6 +10,7 @@ M.popup_buf = popup.popup_buf
 M.popup_win = popup.popup_win
 M.history = {}
 M.context_text = nil
+M.workspace_buf = nil
 
 -- Expor funções públicas
 M.ContextChatFull = commands.ContextChatFull
@@ -22,6 +23,7 @@ M.ContextApis = commands.ContextApis
 M.ContextTree = commands.ContextTree
 M.TogglePopup = commands.TogglePopup
 M.ContextBuffers = commands.ContextBuffers
+M.ToggleWorkspaceView = function() commands.ToggleWorkspaceView(M) end
 
 -- Variável para controlar o estado do popup
 M.popup_visible = false
