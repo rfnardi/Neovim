@@ -94,49 +94,52 @@ M.ContextBuffers = function()
   popup.open_popup(combined_text, combined_text)
 end
 
--- /home/nardi/.config/nvim/lua/multi_context/commands.lua
 
-M.ToggleWorkspaceView = function(plugin) -- Aceita o estado do plugin como argumento
+M.ToggleWorkspaceView = function(plugin)
 	local api = vim.api
-	local utils = require('multi_context.utils') -- Requerer dependências localmente
+	local utils = require('multi_context.utils')
 	local popup = require('multi_context.popup')
 
 	local current_buf = api.nvim_get_current_buf()
 
 	-- Cenário 1: Estamos no popup, queremos ir para o buffer de workspace
 	if current_buf == plugin.popup_buf then
+		-- Primeiro, sempre capturamos o conteúdo atual do popup
+		local popup_lines = api.nvim_buf_get_lines(plugin.popup_buf, 0, -1, false)
+
 		plugin.HidePopup()
 
 		if plugin.workspace_buf and api.nvim_buf_is_valid(plugin.workspace_buf) then
+			--- ALTERAÇÃO PRINCIPAL: Atualiza o conteúdo do workspace com o do popup
+			api.nvim_buf_set_lines(plugin.workspace_buf, 0, -1, false, popup_lines)
 			api.nvim_set_current_buf(plugin.workspace_buf)
-			return
+		else
+			-- Criar o buffer de workspace pela primeira vez (a lógica de cópia já estava aqui)
+			local filename = utils.generate_chat_filename()
+			local new_buf = api.nvim_create_buf(true, false)
+
+			api.nvim_buf_set_name(new_buf, filename)
+			api.nvim_buf_set_option(new_buf, 'filetype', 'markdown')
+			api.nvim_buf_set_option(new_buf, 'buftype', 'nofile')
+			api.nvim_buf_set_option(new_buf, 'bufhidden', 'hide')
+
+			api.nvim_buf_set_lines(new_buf, 0, -1, false, popup_lines)
+
+			api.nvim_buf_set_keymap(new_buf, "n", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", { noremap=true, silent=true })
+			api.nvim_buf_set_keymap(new_buf, "i", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", { noremap=true, silent=true })
+
+			plugin.workspace_buf = new_buf
+			api.nvim_set_current_buf(plugin.workspace_buf)
+			vim.notify("Visualização de workspace ativada. Pressione <A-w> para voltar ao popup.")
 		end
 
-		local filename = utils.generate_chat_filename()
-		local new_buf = api.nvim_create_buf(true, false)
-
-		api.nvim_buf_set_name(new_buf, filename)
-		api.nvim_buf_set_option(new_buf, 'filetype', 'markdown')
-		api.nvim_buf_set_option(new_buf, 'buftype', 'nofile')
-		api.nvim_buf_set_option(new_buf, 'bufhidden', 'hide')
-
-		local popup_lines = api.nvim_buf_get_lines(plugin.popup_buf, 0, -1, false)
-		api.nvim_buf_set_lines(new_buf, 0, -1, false, popup_lines)
-
-		-- O keymap continua chamando a função global, o que está correto
-		api.nvim_buf_set_keymap(new_buf, "n", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", { noremap=true, silent=true })
-		api.nvim_buf_set_keymap(new_buf, "i", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", { noremap=true, silent=true })
-
-		plugin.workspace_buf = new_buf
-		api.nvim_set_current_buf(plugin.workspace_buf)
-		vim.notify("Visualização de workspace ativada. Pressione <A-w> para voltar ao popup.")
-
-		vim.cmd('stopinsert') -- Garante modo Normal
+		-- Posicionar o cursor no workspace (lógica já correta)
+		vim.cmd('stopinsert')
 		local last_line = api.nvim_buf_line_count(plugin.workspace_buf)
 		local line_content = api.nvim_buf_get_lines(plugin.workspace_buf, last_line - 1, last_line, false)[1] or ""
-		api.nvim_win_set_cursor(0, {last_line, #line_content}) -- Usa a janela atual (0)
+		api.nvim_win_set_cursor(0, {last_line, #line_content})
 
-	-- Cenário 2: Estamos no buffer de workspace, queremos voltar para o popup
+	-- Cenário 2: Estamos no buffer de workspace, queremos voltar para o popup (já estava correto)
 	elseif current_buf == plugin.workspace_buf then
 		if not plugin.popup_buf or not api.nvim_buf_is_valid(plugin.popup_buf) then
 			vim.notify("O buffer do popup não é mais válido.", vim.log.levels.ERROR)
@@ -152,7 +155,8 @@ M.ToggleWorkspaceView = function(plugin) -- Aceita o estado do plugin como argum
 		utils.apply_highlights(plugin.popup_buf)
 		popup.create_folds(plugin.popup_buf)
 
-		vim.cmd('stopinsert') -- Garante modo Normal
+		-- Posicionar o cursor no popup (lógica já correta)
+		vim.cmd('stopinsert')
 		local last_line = api.nvim_buf_line_count(plugin.popup_buf)
 		local line_content = api.nvim_buf_get_lines(plugin.popup_buf, last_line - 1, last_line, false)[1] or ""
 		api.nvim_win_set_cursor(plugin.popup_win, {last_line, #line_content})
