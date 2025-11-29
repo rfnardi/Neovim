@@ -6,41 +6,6 @@ let g:python3_host_prog = '/usr/bin/python3'
 let g:loaded_ruby_provider = 0 " não carrega o provedor de ruby (não uso isso)
 let g:loaded_perl_provider = 0 " não carrega o provedor perl
 
-"---------------------------------------------
-" 				Checagem de rede
-"---------------------------------------------
-"
-function! CheckNetwork()
-  " Testa conexão rápida com o registro do npm (usado pelo coc.nvim)
-  let l:status = system('ping -c 1 registry.npmjs.org > /dev/null 2>&1 && echo 1 || echo 0')
-  return l:status ==# "1\n"
-endfunction
-
-"---------------------------------------------
-" 				Extensões do coc.nvim
-"---------------------------------------------
-"
-if CheckNetwork()
-  echo "🌐 Rede detectada — verificando extensões do coc.nvim..."
-  let g:coc_global_extensions = [
-    \ 'coc-json',
-    \ 'coc-pyright',
-    \ 'coc-texlab',
-    \ 'coc-html',
-    \ 'coc-clangd',
-    \ 'coc-cmake',
-    \ 'coc-sh',
-    \ 'coc-tsserver',
-    \ 'coc-snippets',
-    \ 'coc-yank',
-    \ 'coc-highlight',
-    \ 'coc-vimlsp',
-    \ 'coc-calc',
-    \ 'coc-jedi'
-    \ ]
-else
-  echo "⚠️ Sem conexão: extensões coc não serão verificadas agora."
-endif
 
 "---------------------------------------------
 " 				Plugins
@@ -68,7 +33,9 @@ Plug 'junegunn/fzf.vim'
 Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
 call plug#end()
 
+" ----------------------------------------------------
 " Multi-Context:
+" ----------------------------------------------------
 lua require('multi_context')
 command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
 command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
@@ -77,13 +44,12 @@ command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
 command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
 command! -nargs=0 ContextTree lua require("multi_context").ContextTree()
 command! -nargs=0 ContextBuffers lua require("multi_context").ContextBuffers()
-
-
 " Comando para toggle do popup
 command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
-
 nnoremap <A-h> :lua require('multi_context').TogglePopup()<CR>
 inoremap <A-h> <Esc>:lua require('multi_context').TogglePopup()<CR>a
+" ----------------------------------------------------
+" ----------------------------------------------------
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das
 " linguagens do coc: :source ./coc-extensoes.vim
