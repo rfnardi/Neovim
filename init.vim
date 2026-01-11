@@ -31,6 +31,10 @@ Plug 'eslint/eslint'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 Plug 'rodrigore/coc-tailwind-intellisense', {'do': 'npm install'}
+Plug 'tpope/vim-dadbod'
+Plug 'kristijanhusak/vim-dadbod-ui'
+Plug 'kristijanhusak/vim-dadbod-completion'
+
 call plug#end()
 
 " ----------------------------------------------------
@@ -240,3 +244,5 @@ nnoremap <A-f> :Files<CR>
 
 inoremap <A-q> \
 inoremap <A-w> \|
+
+nnoremap <A-d> :DBUIToggle <esc>
