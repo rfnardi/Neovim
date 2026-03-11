@@ -1,3 +1,41 @@
+#!/bin/bash
+
+# Define a pasta do plugin
+PLUGIN_DIR="lua/multi_context"
+
+echo "🚀 Iniciando refatoração para configurabilidade..."
+
+# 1. Criar o arquivo de configuração padrão
+cat << 'EOF' > "$PLUGIN_DIR/config.lua"
+local M = {}
+
+M.defaults = {
+    user_name = "Nardi",
+    config_path = vim.fn.stdpath("config") .. "/context_apis.json",
+    api_keys_path = vim.fn.stdpath("config") .. "/api_keys.json",
+    default_api = nil, -- Se nil, usa o do JSON
+    appearance = {
+        border = "rounded",
+        width = 0.7,
+        height = 0.7,
+        title = " MultiContext - Chat ",
+    }
+}
+
+M.options = {}
+
+function M.setup(user_opts)
+    M.options = vim.tbl_deep_extend("force", M.defaults, user_opts or {})
+end
+
+return M
+EOF
+
+echo "✅ Arquivo config.lua criado."
+
+# 2. Injetar a lógica de setup no init.lua e atualizar referências
+# Vamos reconstruir o topo do init.lua para incluir o config
+cat << 'EOF' > "$PLUGIN_DIR/init.lua.new"
 local api = vim.api
 local config = require('multi_context.config')
 local utils = require('multi_context.utils')
@@ -168,3 +206,16 @@ function M.SendFromPopup()
 end
 
 return M
+EOF
+
+mv "$PLUGIN_DIR/init.lua.new" "$PLUGIN_DIR/init.lua"
+echo "✅ init.lua refatorado."
+
+# 3. Atualizar utils.lua para ler do config
+sed -i "s|vim.fn.expand('\~/.config/nvim/context_apis.json')|require('multi_context.config').options.config_path|g" "$PLUGIN_DIR/utils.lua"
+sed -i "s|vim.fn.expand('\~/.config/nvim/api_keys.json')|require('multi_context.config').options.api_keys_path|g" "$PLUGIN_DIR/utils.lua"
+sed -i "s|## Nardi >>|## \" .. require('multi_context.config').options.user_name .. \" >>|g" "$PLUGIN_DIR/utils.lua"
+
+echo "✅ utils.lua atualizado."
+
+echo "🎉 Refatoração concluída! Lembre-se de chamar require('multi_context').setup({}) no seu init.lua/vim"

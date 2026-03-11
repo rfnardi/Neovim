@@ -40,7 +40,22 @@ call plug#end()
 " ----------------------------------------------------
 " Multi-Context:
 " ----------------------------------------------------
-lua require('multi_context')
+" --------------------------------------------------" ----------------------------------------------------
+" Multi-Context: Configuração e Comandos
+" ----------------------------------------------------
+lua << EOF
+require('multi_context').setup({
+    user_name = "Nardi",
+    appearance = {
+        border = "rounded",
+        width = 0.8,
+        height = 0.7,
+        title = " 🤖 MultiContext AI ",
+    }
+})
+EOF
+
+" Comandos do Usuário
 command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
 command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
 command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()
@@ -48,11 +63,18 @@ command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
 command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
 command! -nargs=0 ContextTree lua require("multi_context").ContextTree()
 command! -nargs=0 ContextBuffers lua require("multi_context").ContextBuffers()
-" Comando para toggle do popup
 command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
-nnoremap <A-h> :lua require('multi_context').TogglePopup()<CR>
-inoremap <A-h> <Esc>:lua require('multi_context').TogglePopup()<CR>a
-" ----------------------------------------------------
+
+" Atalhos (Ajustados para evitar conflitos)
+nnoremap <A-c> :Context<CR>
+vnoremap <A-c> :lua require('multi_context').ContextChatHandler(vim.fn.line("'<"), vim.fn.line("'>"))<CR>
+
+" Use <A-h> para o Popup (deixando <A-m> livre para o seu :mkview lá embaixo)
+nnoremap <A-h> :ContextToggle<CR>
+inoremap <A-h> <Esc>:ContextToggle<CR>
+
+" Workspace
+nnoremap <A-w> :lua require('multi_context').ToggleWorkspaceView()<CR>--
 " ----------------------------------------------------
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das

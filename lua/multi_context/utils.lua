@@ -20,7 +20,7 @@ end
 M.find_last_user_line = function(buf)
 	local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
 	for i = #lines, 1, -1 do
-		if lines[i]:match("^## Nardi >>") then
+		if lines[i]:match("^## " .. require('multi_context.config').options.user_name .. " >>") then
 			return i - 1, lines[i]
 		end
 	end
@@ -28,7 +28,7 @@ M.find_last_user_line = function(buf)
 end
 
 M.load_api_config = function()
-	local config_path = vim.fn.expand('~/.config/nvim/context_apis.json')
+	local config_path = require('multi_context.config').options.config_path
 	local file = io.open(config_path, 'r')
 	if not file then
 		return nil
@@ -39,7 +39,7 @@ M.load_api_config = function()
 end
 
 M.load_api_keys = function()
-	local keys_path = vim.fn.expand('~/.config/nvim/api_keys.json')
+	local keys_path = require('multi_context.config').options.api_keys_path
 	local file = io.open(keys_path, 'r')
 	if not file then
 		return {}
@@ -142,8 +142,8 @@ M.apply_highlights = function(buf)
 			end
 		end
 
-		if line:match("^## Nardi >>") then
-			local start_idx, end_idx = line:find("## Nardi >>")
+		if line:match("^## " .. require('multi_context.config').options.user_name .. " >>") then
+			local start_idx, end_idx = line:find("## " .. require('multi_context.config').options.user_name .. " >>")
 			if start_idx then
 				api.nvim_buf_add_highlight(buf, -1, "ContextUser", i, start_idx-1, end_idx)
 			end
@@ -251,7 +251,7 @@ end
 
 M.get_popup_content = function(buf)
 	local line_count = api.nvim_buf_line_count(buf)
-	local lines = api.nvim_buf_get_lines(buf, 0, line_count - 1, false)  -- Exclui a última linha (## Nardi >>)
+	local lines = api.nvim_buf_get_lines(buf, 0, line_count - 1, false)  -- Exclui a última linha (## " .. require('multi_context.config').options.user_name .. " >>)
 	return table.concat(lines, "\n")
 end
 
@@ -508,7 +508,7 @@ M.set_selected_api = function(api_name)
 	if api_exists then
 		api_config.default_api = api_name
 		-- Salva a configuracao atualizada
-		local config_path = vim.fn.expand('~/.config/nvim/context_apis.json')
+		local config_path = require('multi_context.config').options.config_path
 		local file = io.open(config_path, 'w')
 		if file then
 			-- Tenta codificar com formatacao. Em versoes mais antigas do Neovim,
