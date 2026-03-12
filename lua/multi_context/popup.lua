@@ -29,6 +29,8 @@ function M.create_popup()
     api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", opts)
     api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", opts)
     api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", opts)
+		api.nvim_buf_set_keymap(buf, "n", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", opts)
+		api.nvim_buf_set_keymap(buf, "i", "<A-w>", "<Esc><Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", opts)
 
     local width = math.ceil(vim.o.columns * 0.8)
     local height = math.ceil(vim.o.lines * 0.8)

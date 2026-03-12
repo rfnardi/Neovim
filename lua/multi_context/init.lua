@@ -42,10 +42,45 @@ M.TogglePopup = function()
 end
 
 -- Abre o contexto do projeto como workspace (atalho <A-w>)
-M.ToggleWorkspaceView = function()
-    commands.ContextTree()
-end
 
+-- Variável para rastrear se este chat já pertence a um arquivo
+M.current_workspace_file = nil
+
+M.ToggleWorkspaceView = function()
+    local ui_popup = require('multi_context.ui.popup')
+    local win = vim.api.nvim_get_current_win()
+    local config = vim.api.nvim_win_get_config(win)
+
+    -- CENÁRIO A: Saindo do Popup para o Workspace
+    if config.relative ~= "" then
+        if ui_popup.popup_buf and vim.api.nvim_buf_is_valid(ui_popup.popup_buf) then
+            local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
+            local content = table.concat(lines, "\n")
+            
+            -- Fecha o popup
+            vim.api.nvim_win_close(ui_popup.popup_win, true)
+            
+            -- Exporta usando o nome salvo (se existir) para não duplicar
+            M.current_workspace_file = require('multi_context.utils').export_to_workspace(content, M.current_workspace_file)
+        end
+
+    -- CENÁRIO B: Voltando do Workspace para o Popup
+    else
+        local cur_buf = vim.api.nvim_get_current_buf()
+        local lines = vim.api.nvim_buf_get_lines(cur_buf, 0, -1, false)
+        local content = table.concat(lines, "\n")
+        
+        -- Salva o nome do arquivo atual para que o próximo <A-w> volte para ele
+        local name = vim.api.nvim_buf_get_name(cur_buf)
+        if name:match("multi_context_chats") then
+            M.current_workspace_file = name
+        end
+        
+        if content ~= "" then
+            ui_popup.create_popup(content)
+        end
+    end
+end
 -- ── SendFromPopup ─────────────────────────────────────────────────────────────
 
 M.SendFromPopup = function()

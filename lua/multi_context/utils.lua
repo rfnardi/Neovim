@@ -8,6 +8,45 @@
 local M   = {}
 local api = vim.api
 
+-- Gera um buffer de workspace com o conteúdo atual do popup
+-- Em lua/multi_context/utils.lua
+
+M.export_to_workspace = function(content, existing_filename)
+    local filename = existing_filename
+    if not filename then
+        local timestamp = os.date("%Y%m%d_%H%M%S")
+        local chat_dir = vim.fn.expand("~/.config/nvim/multi_context_chats")
+        if vim.fn.isdirectory(chat_dir) == 0 then
+            vim.fn.mkdir(chat_dir, "p")
+        end
+        filename = chat_dir .. "/chat_" .. timestamp .. ".md"
+    end
+    
+    -- Abre o arquivo (se já estiver aberto, apenas foca)
+    vim.cmd("edit " .. filename)
+    
+    local new_buf = vim.api.nvim_get_current_buf()
+    
+    -- Configura o buffer
+    vim.bo[new_buf].filetype = "markdown"
+    local lines = M.split_lines(content)
+    
+    -- Atualiza o conteúdo total
+    vim.api.nvim_buf_set_lines(new_buf, 0, -1, false, lines)
+    
+    -- Salva
+    vim.cmd("write")
+    
+    -- Ponto 1: Cursor na última linha em modo normal
+    local last_line = vim.api.nvim_buf_line_count(new_buf)
+    vim.api.nvim_win_set_cursor(0, { last_line, 0 })
+    
+    -- Garante que saia de qualquer modo de inserção residual
+    vim.cmd("stopinsert")
+    
+    return filename -- Retorna para podermos rastrear
+end
+
 M.split_lines = function(s)
     local t = {}
     if not s or s == "" then return t end
