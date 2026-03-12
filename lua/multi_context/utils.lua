@@ -1,75 +1,12 @@
+-- utils.lua
+-- Utilitários de texto e buffer sem domínio próprio.
+-- Funções de domínio foram movidas para módulos específicos:
+--   config.lua           → I/O de configuração JSON
+--   context_builders.lua → coleta de contexto do editor
+--   conversation.lua     → histórico de mensagens
+--   ui/highlights.lua    → destaques visuais
+local M   = {}
 local api = vim.api
-local M = {}
-M.ns_id = api.nvim_create_namespace("multi_context_highlights")
-
-M.load_api_config = function()
-    local path = require('multi_context.config').options.config_path
-    local file = io.open(path, 'r')
-    if not file then return nil end
-    local content = file:read('*a'); file:close()
-    return vim.fn.json_decode(content)
-end
-
-M.load_api_keys = function()
-    local path = require('multi_context.config').options.api_keys_path
-    local file = io.open(path, 'r')
-    if not file then return {} end
-    local content = file:read('*a'); file:close()
-    return vim.fn.json_decode(content) or {}
-end
-
-M.set_selected_api = function(api_name)
-    local cfg = M.load_api_config()
-    if not cfg then return false end
-    cfg.default_api = api_name
-    local raw = vim.fn.json_encode(cfg)
-    local formatted = vim.fn.system(string.format("echo %s | jq .", vim.fn.shellescape(raw)))
-    local f = io.open(require('multi_context.config').options.config_path, 'w')
-    if f then f:write(formatted); f:close(); return true end
-    return false
-end
-
--- BUG FIX #1a: função ausente – retorna lista de nomes das APIs configuradas
-M.get_api_names = function()
-    local cfg = M.load_api_config()
-    if not cfg then return {} end
-    local names = {}
-    for _, a in ipairs(cfg.apis) do
-        table.insert(names, a.name)
-    end
-    return names
-end
-
--- BUG FIX #1b: função ausente – retorna a API padrão atual
-M.get_current_api = function()
-    local cfg = M.load_api_config()
-    if not cfg then return "" end
-    return cfg.default_api or ""
-end
-
--- BUG FIX #1c: função ausente – insere linhas numa posição do buffer
-M.insert_after = function(buf, line_idx, lines)
-    -- line_idx == -1 significa no final do buffer
-    local target = line_idx == -1 and api.nvim_buf_line_count(buf) or line_idx
-    api.nvim_buf_set_lines(buf, target, target, false, lines)
-end
-
--- BUG FIX #1d: função ausente – retorna conteúdo de todos os buffers abertos
-M.get_all_buffers_content = function()
-    local result = {}
-    for _, bufnr in ipairs(api.nvim_list_bufs()) do
-        if api.nvim_buf_is_loaded(bufnr) then
-            local name = api.nvim_buf_get_name(bufnr)
-            local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
-            if #lines > 0 and name ~= "" then
-                table.insert(result, "=== Buffer: " .. name .. " ===")
-                vim.list_extend(result, lines)
-                table.insert(result, "")
-            end
-        end
-    end
-    return table.concat(result, "\n")
-end
 
 M.split_lines = function(s)
     local t = {}
@@ -78,51 +15,44 @@ M.split_lines = function(s)
     return t
 end
 
-M.get_git_diff = function()
-    local root = vim.fn.system("git rev-parse --show-toplevel"):gsub("\n", "")
-    if vim.v.shell_error ~= 0 then return "=== Não é um repositório Git ===" end
-    return "=== GIT DIFF ===\n" .. vim.fn.system("git diff HEAD")
+-- Insere linhas no buffer. line_idx == -1 significa ao final.
+M.insert_after = function(buf, line_idx, lines)
+    local target = (line_idx == -1) and api.nvim_buf_line_count(buf) or line_idx
+    api.nvim_buf_set_lines(buf, target, target, false, lines)
 end
 
-M.get_tree_context = function()
-    local dir = vim.fn.expand('%:p:h')
-    local tree = vim.fn.system("tree -f " .. vim.fn.shellescape(dir))
-    local ctx = { "=== TREE E CONTEÚDO ===\n", tree }
-    local files = vim.fn.split(vim.fn.system("find " .. vim.fn.shellescape(dir) .. " -maxdepth 2 -type f"), "\n")
-    for _, f in ipairs(files) do
-        if not f:match("/%.git/") then
-            table.insert(ctx, "== Arquivo: " .. f)
-            local ok, content = pcall(vim.fn.readfile, f)
-            if ok then for _, l in ipairs(content) do table.insert(ctx, l) end end
-        end
-    end
-    return table.concat(ctx, "\n")
-end
-
-M.find_last_user_line = function(buf)
-    local name = require('multi_context.config').options.user_name
-    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
-    for i = #lines, 1, -1 do if lines[i]:match("^## " .. name .. " >>") then return i - 1, lines[i] end end
-    return nil
-end
-
-M.apply_highlights = function(buf)
-    api.nvim_buf_clear_namespace(buf, M.ns_id, 0, -1)
-    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
-    for i, l in ipairs(lines) do if l:match("^## IA") then api.nvim_buf_set_extmark(buf, M.ns_id, i-1, 0, { end_col = #l, hl_group = "DiagnosticInfo" }) end end
-end
-
+-- Copia o bloco de código delimitado por ``` mais próximo do cursor.
 M.copy_code_block = function()
-    local buf = api.nvim_get_current_buf()
+    local buf    = api.nvim_get_current_buf()
     local cursor = api.nvim_win_get_cursor(0)[1]
-    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
-    local s, e = nil, nil
-    for i = cursor, 1, -1 do if lines[i] and lines[i]:match("^```") then s = i break end end
-    for i = cursor, #lines do if lines[i] and lines[i]:match("^```") and i ~= s then e = i break end end
+    local lines  = api.nvim_buf_get_lines(buf, 0, -1, false)
+    local s, e   = nil, nil
+    for i = cursor, 1, -1 do
+        if lines[i] and lines[i]:match("^```") then s = i; break end
+    end
+    for i = cursor, #lines do
+        if lines[i] and lines[i]:match("^```") and i ~= s then e = i; break end
+    end
     if s and e then
         vim.fn.setreg('+', table.concat(api.nvim_buf_get_lines(buf, s, e - 1, false), "\n"))
-        vim.notify("🚀 Código copiado!")
+        vim.notify("Código copiado!")
+    else
+        vim.notify("Nenhum bloco de código encontrado.", vim.log.levels.WARN)
     end
 end
+
+-- ── Wrappers de compatibilidade retroativa ────────────────────────────────────
+-- Permitem que código externo ainda use os nomes antigos durante a transição.
+
+M.apply_highlights        = function(b) require('multi_context.ui.highlights').apply_chat(b) end
+M.get_git_diff            = function()  return require('multi_context.context_builders').get_git_diff() end
+M.get_tree_context        = function()  return require('multi_context.context_builders').get_tree_context() end
+M.get_all_buffers_content = function()  return require('multi_context.context_builders').get_all_buffers_content() end
+M.find_last_user_line     = function(b) return require('multi_context.conversation').find_last_user_line(b) end
+M.load_api_config         = function()  return require('multi_context.config').load_api_config() end
+M.load_api_keys           = function()  return require('multi_context.config').load_api_keys() end
+M.set_selected_api        = function(n) return require('multi_context.config').set_selected_api(n) end
+M.get_api_names           = function()  return require('multi_context.config').get_api_names() end
+M.get_current_api         = function()  return require('multi_context.config').get_current_api() end
 
 return M

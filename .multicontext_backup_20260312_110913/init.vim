@@ -77,7 +77,7 @@ nnoremap <A-h> :ContextToggle<CR>
 inoremap <A-h> <Esc>:ContextToggle<CR>
 
 " Workspace
-nnoremap <A-w> :lua require('multi_context').ToggleWorkspaceView()<CR>
+nnoremap <A-w> :lua require('multi_context').ToggleWorkspaceView()<CR>--
 " ----------------------------------------------------
 
 " ao reinstalar o nvim, rodar o arquivo ./coc-extensoes.vim para habilitar o intelisense das

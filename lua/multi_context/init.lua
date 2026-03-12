@@ -1,149 +1,129 @@
+-- init.lua
+-- Ponto de entrada do plugin.
+-- Responsabilidades: setup(), API pública e registro de comandos Vim.
+-- Sem lógica de negócio — tudo delega aos módulos específicos.
 local M = {}
-local config = require('multi_context.config')
-local utils = require('multi_context.utils')
-local popup = require('multi_context.popup')
-local commands = require('multi_context.commands')
-local api_handlers = require('multi_context.api_handlers')
 
-M.setup = function(opts) config.setup(opts) end
-M.Context = commands.ContextChatHandler
-M.ContextChatFull = commands.ContextChatFull
+local config       = require('multi_context.config')
+local commands     = require('multi_context.commands')
+local ui_popup     = require('multi_context.ui.popup')
+local utils        = require('multi_context.utils')
+local api_client   = require('multi_context.api_client')
+local conversation = require('multi_context.conversation')
+
+-- ── Setup ─────────────────────────────────────────────────────────────────────
+
+M.setup = function(opts)
+    config.setup(opts)
+end
+
+-- ── API pública ───────────────────────────────────────────────────────────────
+
+M.Context            = commands.ContextChatHandler
+M.ContextChatFull    = commands.ContextChatFull
 M.ContextChatHandler = commands.ContextChatHandler
-M.ContextBuffers = commands.ContextBuffers
-M.ContextChatFolder = commands.ContextTree
-M.ContextFolder = commands.ContextTree
-M.ContextChatGit = commands.ContextChatGit
-M.ContextGit = commands.ContextChatGit
-M.ContextTree = commands.ContextTree
-M.ContextRepo = commands.ContextTree
-M.ContextChatRepo = commands.ContextTree
-M.ContextApis = commands.ContextApis
-M.ContextQueue = function() require('multi_context.queue_editor').open_editor() end
+M.ContextBuffers     = commands.ContextBuffers
+M.ContextChatFolder  = commands.ContextTree
+M.ContextFolder      = commands.ContextTree
+M.ContextChatGit     = commands.ContextChatGit
+M.ContextGit         = commands.ContextChatGit
+M.ContextTree        = commands.ContextTree
+M.ContextRepo        = commands.ContextTree
+M.ContextChatRepo    = commands.ContextTree
+M.ContextApis        = commands.ContextApis
+M.ContextQueue       = function() require('multi_context.queue_editor').open_editor() end
+
 M.TogglePopup = function()
-    if popup.popup_win and vim.api.nvim_win_is_valid(popup.popup_win) then
-        vim.api.nvim_win_close(popup.popup_win, true)
+    if ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) then
+        vim.api.nvim_win_close(ui_popup.popup_win, true)
     else
-        M.ContextChatHandler()
+        commands.ContextChatHandler()
     end
 end
 
--- BUG FIX #4: constrói o histórico completo de conversas a partir do buffer
--- Antes enviava apenas a última mensagem, tornando a IA sem memória de contexto
-local function build_conversation_history(buf, user_name)
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local messages = {}
-    local current_role = nil
-    local current_lines = {}
-    local user_prefix = "## " .. user_name .. " >>"
-    local ia_prefix = "## IA >>"
-    local api_prefix = "## API atual:"
-
-    local function flush()
-        if current_role and #current_lines > 0 then
-            local text = table.concat(current_lines, "\n"):match("^%s*(.-)%s*$")
-            if text ~= "" then
-                table.insert(messages, { role = current_role, content = text })
-            end
-        end
-        current_lines = {}
-    end
-
-    for _, line in ipairs(lines) do
-        if line:match("^" .. user_prefix) then
-            flush()
-            current_role = "user"
-            local content = line:gsub("^" .. user_prefix .. "%s*", "")
-            if content ~= "" then table.insert(current_lines, content) end
-        elseif line:match("^" .. ia_prefix) then
-            flush()
-            current_role = "assistant"
-        elseif line:match("^" .. api_prefix) then
-            -- linha de metadado, ignora
-        else
-            if current_role then
-                table.insert(current_lines, line)
-            end
-        end
-    end
-    flush()
-    return messages
+-- Abre o contexto do projeto como workspace (atalho <A-w>)
+M.ToggleWorkspaceView = function()
+    commands.ContextTree()
 end
+
+-- ── SendFromPopup ─────────────────────────────────────────────────────────────
 
 M.SendFromPopup = function()
-    local buf = popup.popup_buf
+    local buf = ui_popup.popup_buf
     if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
 
-    local user_name = config.options.user_name
-    local user_prefix = "## " .. user_name .. " >>"
+    local user_prefix = "## " .. config.options.user_name .. " >> "
+    local hl          = require('multi_context.ui.highlights')
 
-    -- BUG FIX #4: constrói histórico completo
-    local messages = build_conversation_history(buf, user_name)
+    -- Monta histórico completo da sessão
+    local messages = conversation.build_history(buf)
 
-    -- A última mensagem deve ser do usuário e não pode estar vazia
-    if #messages == 0 or messages[#messages].role ~= "user" or messages[#messages].content == "" then
+    -- Valida: última mensagem deve ser do usuário e não vazia
+    if #messages == 0
+        or messages[#messages].role    ~= "user"
+        or messages[#messages].content == "" then
         return
     end
 
-    -- Adiciona bloco de resposta da IA
+    -- Reserva bloco de resposta no buffer
     vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "", "## IA >> ", "" })
-    local resp_line = vim.api.nvim_buf_line_count(buf) - 1
+    local resp_start  = vim.api.nvim_buf_line_count(buf) - 1
+    local accumulated = ""
+		local last_render = 0
 
-    local cfg = utils.load_api_config()
-    local queue = {}
-    for _, a in ipairs(cfg.apis) do
-        if a.name == cfg.default_api then
-            table.insert(queue, a)
-            break
-        end
-    end
-    if cfg.fallback_mode then
-        for _, a in ipairs(cfg.apis) do
-            if a['include_in_fall-back_mode'] and a.name ~= cfg.default_api then
-                table.insert(queue, a)
+		vim.bo[buf].modifiable = false  -- bloqueia durante a resposta da IA
+
+    api_client.execute(
+        messages,
+
+        -- on_chunk: acumula e renderiza em tempo real
+				function(chunk, _)
+					accumulated = accumulated .. chunk
+					local now = vim.loop.now()
+						if now - last_render > 50 then
+								last_render = now
+								vim.schedule(function()
+										if vim.api.nvim_buf_is_valid(buf) then
+												vim.bo[buf].modifiable = true
+												vim.api.nvim_buf_set_lines(buf, resp_start, -1, false,
+														utils.split_lines(accumulated))
+										end
+										vim.notify("MultiContext: " .. msg, vim.log.levels.ERROR)
+								end)
+						end
+				end,
+
+        -- on_done: insere rodapé e posiciona cursor no próximo prompt
+        function(entry)
+            utils.insert_after(buf, -1, {
+                "",
+                "## API atual: " .. entry.name,
+                user_prefix,
+            })
+            hl.apply_chat(buf)
+            local last = vim.api.nvim_buf_line_count(buf)
+            if ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) then
+                vim.api.nvim_win_set_cursor(ui_popup.popup_win, { last, #user_prefix })
+                vim.cmd("startinsert!")
             end
-        end
-    end
+        end,
 
-    local function execute(idx)
-        if idx > #queue then
-            vim.notify("❌ Erro em todas as APIs.", 4)
-            return
+        -- on_error
+        function(msg)
+            vim.notify("MultiContext: " .. msg, vim.log.levels.ERROR)
         end
-        local current = queue[idx]
-        local current_resp = ""
-        local handler = api_handlers[current.api_type or "openai"]
-        if not handler then
-            vim.notify("⚠️ Handler não encontrado para api_type: " .. (current.api_type or "?"), 3)
-            execute(idx + 1)
-            return
-        end
-        -- BUG FIX #4: passa o histórico completo, não só a última mensagem
-        handler.make_request(current, messages, utils.load_api_keys(), nil, function(content, err, done)
-            vim.schedule(function()
-                if err then
-                    execute(idx + 1)
-                    return
-                end
-                if content then
-                    current_resp = current_resp .. content
-                    vim.api.nvim_buf_set_lines(buf, resp_line, -1, false, utils.split_lines(current_resp))
-                end
-                if done then
-                    utils.insert_after(buf, -1, { "", "## API atual: " .. current.name, user_prefix .. " " })
-                end
-            end)
-        end)
-    end
-    execute(1)
+    )
 end
 
+-- ── Comandos Vim ──────────────────────────────────────────────────────────────
+
 vim.cmd([[
-  command! Context lua require('multi_context').Context()
+  command! Context        lua require('multi_context').Context()
   command! ContextBuffers lua require('multi_context').ContextBuffers()
-  command! ContextTree lua require('multi_context').ContextTree()
-  command! ContextRepo lua require('multi_context').ContextRepo()
-  command! ContextApis lua require('multi_context').ContextApis()
-  command! ContextQueue lua require('multi_context').ContextQueue()
+  command! ContextTree    lua require('multi_context').ContextTree()
+  command! ContextRepo    lua require('multi_context').ContextRepo()
+  command! ContextApis    lua require('multi_context').ContextApis()
+  command! ContextQueue   lua require('multi_context').ContextQueue()
 ]])
 
 return M

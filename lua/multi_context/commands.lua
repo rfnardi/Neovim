@@ -1,28 +1,46 @@
+-- commands.lua
+-- Handlers dos comandos expostos pelo plugin.
+-- Conecta :Context*, :ContextGit, etc. aos context_builders e ao popup.
 local M = {}
-local api, popup, utils = vim.api, require('multi_context.popup'), require('multi_context.utils')
-local function start(content)
-    local buf, win = popup.create_popup()
-    local lines = utils.split_lines(content)
-    api.nvim_buf_set_lines(buf, 0, 0, false, lines)
-    api.nvim_win_set_cursor(win, {api.nvim_buf_line_count(buf), 0})
+
+-- Abre o popup com um conteúdo inicial e entra em modo de inserção.
+local function open_with(content)
+    local buf, win = require('multi_context.ui.popup').create_popup(content)
+    if buf and win then vim.cmd("startinsert!") end
 end
-M.ContextChatHandler = function()
-    local buf = api.nvim_get_current_buf()
-    local mode = api.nvim_get_mode().mode
+
+M.ContextChatHandler = function(line1, line2)
+    local ctx = require('multi_context.context_builders')
+    -- Chamado com range explícito (comando -range ou vnoremap)
+    if line1 and line2 and tonumber(line1) ~= tonumber(line2) then
+        open_with(ctx.get_visual_selection(line1, line2))
+        return
+    end
+    -- Chamado sem range: detecta modo visual ou usa buffer inteiro
+    local mode = vim.api.nvim_get_mode().mode
     if mode == 'v' or mode == 'V' then
-        local s, e = vim.fn.getpos("v")[2], vim.fn.getpos(".")[2]
-        if s > e then s, e = e, s end
-        start("=== SELEÇÃO ===\n" .. table.concat(api.nvim_buf_get_lines(buf, s-1, e, false), "\n"))
-    else start("=== BUFFER ATUAL ===\n" .. table.concat(api.nvim_buf_get_lines(buf, 0, -1, false), "\n")) end
+        open_with(ctx.get_visual_selection())
+    else
+        open_with(ctx.get_current_buffer())
+    end
 end
-M.ContextChatFull = function() start("") end
-M.ContextBuffers = function() start(utils.get_all_buffers_content()) end
-M.ContextTree = function() start(utils.get_tree_context()) end
-M.ContextChatGit = function() start(utils.get_git_diff()) end
-M.ContextApis = function()
-    local cfg = utils.load_api_config()
-    local names = {}
-    for _, a in ipairs(cfg.apis) do table.insert(names, a.name) end
-    vim.ui.select(names, {prompt='API Principal:'}, function(c) if c then require('multi_context.utils').set_selected_api(c); vim.notify("API: "..c) end end)
+
+M.ContextChatFull = function() open_with("") end
+
+M.ContextBuffers  = function()
+    open_with(require('multi_context.context_builders').get_all_buffers_content())
 end
+
+M.ContextTree     = function()
+    open_with(require('multi_context.context_builders').get_tree_context())
+end
+
+M.ContextChatGit  = function()
+    open_with(require('multi_context.context_builders').get_git_diff())
+end
+
+M.ContextApis     = function()
+    require('multi_context.api_selector').open_api_selector()
+end
+
 return M
