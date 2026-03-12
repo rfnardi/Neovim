@@ -15,8 +15,13 @@ function M.create_popup()
         return M.popup_buf, M.popup_win
     end
 
-    local buf = api.nvim_create_buf(false, true)
-    M.popup_buf = buf
+    local buf
+
+		if M.popup_buf and api.nvim_buf_is_valid(M.popup_buf) then
+        buf = M.popup_buf
+    else
+        buf = api.nvim_create_buf(false, true)
+        M.popup_buf = buf
 
     vim.bo[buf].buftype = 'nofile'
     vim.bo[buf].filetype = 'markdown'
@@ -31,6 +36,17 @@ function M.create_popup()
     api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", opts)
 		api.nvim_buf_set_keymap(buf, "n", "<A-w>", "<Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", opts)
 		api.nvim_buf_set_keymap(buf, "i", "<A-w>", "<Esc><Cmd>lua require('multi_context').ToggleWorkspaceView()<CR>", opts)
+
+		-- Conteúdo inicial apenas se for buffer novo
+        local user_prefix = "## " .. config.options.user_name .. " >> "
+        if initial_content and initial_content ~= "" then
+            local init_lines = vim.split(initial_content, "\n", { plain = true })
+            api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
+            api.nvim_buf_set_lines(buf, -1, -1, false, { "", user_prefix })
+        else
+            api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
+        end
+    end
 
     local width = math.ceil(vim.o.columns * 0.8)
     local height = math.ceil(vim.o.lines * 0.8)

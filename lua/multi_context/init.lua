@@ -34,11 +34,25 @@ M.ContextApis        = commands.ContextApis
 M.ContextQueue       = function() require('multi_context.queue_editor').open_editor() end
 
 M.TogglePopup = function()
+    -- Se a janela está aberta e é válida, apenas fechamos (ocultamos)
     if ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) then
         vim.api.nvim_win_close(ui_popup.popup_win, true)
-    else
-        commands.ContextChatHandler()
+        return
     end
+
+    -- Se a janela NÃO existe, mas o BUFFER ainda existe e tem conteúdo
+    if ui_popup.popup_buf and vim.api.nvim_buf_is_valid(ui_popup.popup_buf) then
+        -- Verificamos se o buffer não está vazio (além do prefixo do usuário)
+        local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
+        if #lines > 1 or (lines[1] and #lines[1] > 15) then 
+            -- Reabre a janela mantendo o buffer existente
+            ui_popup.create_popup() -- Chamada sem argumentos mantém o buffer
+            return
+        end
+    end
+
+    -- Se nada existe ou o buffer está limpo, inicia um novo chat com contexto
+    commands.ContextChatHandler()
 end
 
 -- Abre o contexto do projeto como workspace (atalho <A-w>)
