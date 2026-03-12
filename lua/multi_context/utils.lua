@@ -29,6 +29,48 @@ M.set_selected_api = function(api_name)
     return false
 end
 
+-- BUG FIX #1a: função ausente – retorna lista de nomes das APIs configuradas
+M.get_api_names = function()
+    local cfg = M.load_api_config()
+    if not cfg then return {} end
+    local names = {}
+    for _, a in ipairs(cfg.apis) do
+        table.insert(names, a.name)
+    end
+    return names
+end
+
+-- BUG FIX #1b: função ausente – retorna a API padrão atual
+M.get_current_api = function()
+    local cfg = M.load_api_config()
+    if not cfg then return "" end
+    return cfg.default_api or ""
+end
+
+-- BUG FIX #1c: função ausente – insere linhas numa posição do buffer
+M.insert_after = function(buf, line_idx, lines)
+    -- line_idx == -1 significa no final do buffer
+    local target = line_idx == -1 and api.nvim_buf_line_count(buf) or line_idx
+    api.nvim_buf_set_lines(buf, target, target, false, lines)
+end
+
+-- BUG FIX #1d: função ausente – retorna conteúdo de todos os buffers abertos
+M.get_all_buffers_content = function()
+    local result = {}
+    for _, bufnr in ipairs(api.nvim_list_bufs()) do
+        if api.nvim_buf_is_loaded(bufnr) then
+            local name = api.nvim_buf_get_name(bufnr)
+            local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
+            if #lines > 0 and name ~= "" then
+                table.insert(result, "=== Buffer: " .. name .. " ===")
+                vim.list_extend(result, lines)
+                table.insert(result, "")
+            end
+        end
+    end
+    return table.concat(result, "\n")
+end
+
 M.split_lines = function(s)
     local t = {}
     if not s or s == "" then return t end
@@ -36,7 +78,6 @@ M.split_lines = function(s)
     return t
 end
 
--- A FUNÇÃO QUE FALTAVA
 M.get_git_diff = function()
     local root = vim.fn.system("git rev-parse --show-toplevel"):gsub("\n", "")
     if vim.v.shell_error ~= 0 then return "=== Não é um repositório Git ===" end
