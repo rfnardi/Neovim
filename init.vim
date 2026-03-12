@@ -45,12 +45,14 @@ call plug#end()
 " ----------------------------------------------------
 lua << EOF
 require('multi_context').setup({
-    user_name = "Nardi",
+    user_name = "User",
     appearance = {
         border = "rounded",
         width = 0.8,
         height = 0.7,
         title = " 🤖 MultiContext AI ",
+				config_path = vim.fn.expand('~/.config/nvim/context_apis.json'),
+				api_keys_path = vim.fn.expand('~/.config/nvim/api_keys.json'),
     }
 })
 EOF
@@ -64,6 +66,7 @@ command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
 command! -nargs=0 ContextTree lua require("multi_context").ContextTree()
 command! -nargs=0 ContextBuffers lua require("multi_context").ContextBuffers()
 command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
+command! -nargs=0 ContextQueue lua require("multi_context").ContextQueue()
 
 " Atalhos (Ajustados para evitar conflitos)
 nnoremap <A-c> :Context<CR>
