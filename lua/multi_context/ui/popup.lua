@@ -22,15 +22,12 @@ function M.create_popup(initial_content)
     vim.bo[buf].swapfile  = false
 
     local km = { noremap = true, silent = true }
-    
-    -- === NOVOS ATALHOS DE ENVIO (Funcionam tanto no Modo Normal quanto de Inserção) ===
     api.nvim_buf_set_keymap(buf, "n", "<CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
     api.nvim_buf_set_keymap(buf, "i", "<C-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
     api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
     api.nvim_buf_set_keymap(buf, "i", "<S-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
     api.nvim_buf_set_keymap(buf, "n", "<S-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
 
-    -- Atalhos extras
     api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
     api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
     api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", km)
@@ -40,8 +37,8 @@ function M.create_popup(initial_content)
     local row    = math.ceil((vim.o.lines   - height) / 2)
     local col    = math.ceil((vim.o.columns - width)  / 2)
 
-    local api_name = config.get_current_api()
-    local title    = " " .. (api_name ~= "" and api_name or "MultiContext AI") .. " "
+    -- >>> TÍTULO FIXO REQUISITADO <<<
+    local title = " Multi_Context_Chat "
 
     local win = api.nvim_open_win(buf, true, {
         relative  = 'editor',
@@ -72,7 +69,6 @@ function M.create_popup(initial_content)
         end,
     })
 
-    -- Popula conteúdo inicial
     local user_prefix = "## " .. config.options.user_name .. " >> "
     if initial_content and initial_content ~= "" then
         local init_lines = vim.split(initial_content, "\n", { plain = true })
@@ -85,29 +81,110 @@ function M.create_popup(initial_content)
         api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
     end
 
+    -- Configuração de folds manual antes de aplicar a varredura
+    api.nvim_buf_set_option(buf, "foldmethod", "manual")
+    api.nvim_buf_set_option(buf, "foldenable", true)
+    api.nvim_buf_set_option(buf, "foldlevel", 1)
+
     local last_ln  = api.nvim_buf_line_count(buf)
     local last_txt = api.nvim_buf_get_lines(buf, last_ln - 1, last_ln, false)[1] or ""
     api.nvim_win_set_cursor(win, { last_ln, #last_txt })
 
     hl.apply_chat(buf)
-    M._setup_folds()
+    M.create_folds(buf)
 
     return buf, win
 end
 
-function M._setup_folds()
-    if not M.popup_win or not api.nvim_win_is_valid(M.popup_win) then return end
-    vim.wo[M.popup_win].foldmethod = 'marker'
-    vim.wo[M.popup_win].foldmarker = '## IA >>,## API atual:'
-    vim.wo[M.popup_win].foldlevel  = 99
+-- >>> FUNÇÃO DE FOLDS CLÁSSICA RECUPERADA <<<
+function M.create_folds(buf)
+    if not buf or not api.nvim_buf_is_valid(buf) then return end
+    local config = require('multi_context.config')
+    local user_name = config.options.user_name or "User"
+    local total_lines = api.nvim_buf_line_count(buf)
+
+    -- Limpar folds existentes
+    vim.api.nvim_buf_call(buf, function() pcall(vim.cmd, 'normal! zE') end)
+
+    local headers = {}
+    for i = 0, total_lines - 1 do
+        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
+        if line and (line:match("^## " .. user_name .. " >>") or line:match("^## IA") or 
+            line:match("^===") or line:match("^==")) then
+            table.insert(headers, {line = i, type = "foldable"})
+        elseif line and line:match("^## API atual:") then
+            table.insert(headers, {line = i, type = "api_info"})
+        end
+    end
+
+    table.sort(headers, function(a, b) return a.line < b.line end)
+
+    local last_ia_header_index = nil
+    for i = #headers, 1, -1 do
+        if headers[i].type == "foldable" and headers[i].line and api.nvim_buf_get_lines(buf, headers[i].line, headers[i].line + 1, false)[1]:match("^## IA") then
+            last_ia_header_index = i
+            break
+        end
+    end
+
+    for i = 1, #headers do
+        local current_header = headers[i]
+        if current_header.type ~= "api_info" then
+            local fold_start = current_header.line + 1
+            local fold_end = total_lines - 1
+
+            for j = i + 1, #headers do
+                fold_end = headers[j].line - 1
+                break
+            end
+
+            if fold_start <= fold_end then
+                vim.api.nvim_buf_call(buf, function()
+                    pcall(vim.cmd, string.format("%d,%dfold", fold_start + 1, fold_end + 1))
+                end)
+            end
+        end
+    end
+
+    for i = 1, #headers do
+        local current_header = headers[i]
+        if current_header.type == "foldable" and i ~= last_ia_header_index then
+            local fold_start = current_header.line + 1
+            local fold_end = total_lines - 1
+
+            for j = i + 1, #headers do
+                fold_end = headers[j].line - 1
+                break
+            end
+
+            if fold_start <= fold_end then
+                vim.api.nvim_buf_call(buf, function()
+                    pcall(vim.cmd, string.format("%d,%dfoldclose", fold_start + 1, fold_end + 1))
+                end)
+            end
+        end
+    end
+
+    if last_ia_header_index then
+        local last_ia_header = headers[last_ia_header_index]
+        local fold_start = last_ia_header.line + 1
+        local fold_end = total_lines - 1
+
+        for j = last_ia_header_index + 1, #headers do
+            fold_end = headers[j].line - 1
+            break
+        end
+
+        if fold_start <= fold_end then
+            vim.api.nvim_buf_call(buf, function()
+                pcall(vim.cmd, string.format("%dfoldopen!", fold_start + 1))
+            end)
+        end
+    end
 end
 
 function M.update_title()
-    if not M.popup_win or not api.nvim_win_is_valid(M.popup_win) then return end
-    local api_name = require('multi_context.config').get_current_api()
-    local title    = " " .. (api_name ~= "" and api_name or "MultiContext AI") .. " "
-    api.nvim_win_set_config(M.popup_win, { title = title, title_pos = 'center' })
+    -- Função agora vazia: impede que a API dinâmica mude o título fixo.
 end
 
-M.create_folds = M._setup_folds
 return M

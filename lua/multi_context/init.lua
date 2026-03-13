@@ -134,6 +134,7 @@ M.SendFromPopup = function()
                 user_prefix,
             })
             hl.apply_chat(buf)
+            ui_popup.create_folds(buf)
             local last = vim.api.nvim_buf_line_count(buf)
             if ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) then
                 vim.api.nvim_win_set_cursor(ui_popup.popup_win, { last, #user_prefix })
