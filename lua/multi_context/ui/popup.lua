@@ -1,16 +1,10 @@
--- lua/multi_context/ui/popup.lua
--- Cria e gerencia a janela flutuante de chat.
-
 local api = vim.api
 local M   = {}
 
 M.popup_buf = nil
 M.popup_win = nil
 
--- Cria o popup ou foca no existente se já estiver aberto.
--- initial_content: string com contexto a pré-popular (ou nil para manter o buffer atual).
 function M.create_popup(initial_content)
-    -- 1. Se a janela já existe e é válida, foca nela
     if M.popup_win and api.nvim_win_is_valid(M.popup_win) then
         api.nvim_set_current_win(M.popup_win)
         return M.popup_buf, M.popup_win
@@ -19,32 +13,28 @@ function M.create_popup(initial_content)
     local config = require('multi_context.config')
     local hl     = require('multi_context.ui.highlights')
 
-    -- 2. Cria ou recupera o buffer
-    local buf
-    if M.popup_buf and api.nvim_buf_is_valid(M.popup_buf) then
-        buf = M.popup_buf
-    else
-        buf = api.nvim_create_buf(false, true)
-        M.popup_buf = buf
-    end
+    local buf = api.nvim_create_buf(false, true)
+    M.popup_buf = buf
 
-    -- Configurações do buffer
     vim.bo[buf].buftype   = 'nofile'
     vim.bo[buf].filetype  = 'markdown'
     vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].swapfile  = false
 
-    -- Atalhos de teclado locais ao buffer
     local km = { noremap = true, silent = true }
-    api.nvim_buf_set_keymap(buf, "n", "<CR>",
-        "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-    api.nvim_buf_set_keymap(buf, "n", "<A-b>",
-        "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
-    api.nvim_buf_set_keymap(buf, "i", "<A-b>",
-        "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
+    
+    -- === NOVOS ATALHOS DE ENVIO (Funcionam tanto no Modo Normal quanto de Inserção) ===
+    api.nvim_buf_set_keymap(buf, "n", "<CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<C-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<S-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "n", "<S-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+
+    -- Atalhos extras
+    api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
     api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", km)
 
-    -- 3. Cálculo de dimensões da janela
     local width  = math.ceil(vim.o.columns * 0.8)
     local height = math.ceil(vim.o.lines   * 0.8)
     local row    = math.ceil((vim.o.lines   - height) / 2)
@@ -53,7 +43,6 @@ function M.create_popup(initial_content)
     local api_name = config.get_current_api()
     local title    = " " .. (api_name ~= "" and api_name or "MultiContext AI") .. " "
 
-    -- 4. Abre a janela
     local win = api.nvim_open_win(buf, true, {
         relative  = 'editor',
         width     = width,
@@ -67,51 +56,52 @@ function M.create_popup(initial_content)
     })
     M.popup_win = win
 
-    -- 5. Autocomandos para limpeza
     api.nvim_create_autocmd("WinClosed", {
         pattern  = tostring(win),
         once     = true,
-        callback = function() 
-            M.popup_win = nil 
-            -- Opcional: Não limpamos M.popup_buf aqui para permitir reabrir com TogglePopup
+        callback = function() M.popup_win = nil; M.popup_buf = nil end,
+    })
+
+    api.nvim_create_autocmd("BufWipeout", {
+        buffer   = buf,
+        once     = true,
+        callback = function()
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.bo[buf].modifiable = true
+            end
         end,
     })
 
-    -- 6. Popula conteúdo se for um chat novo (ou se solicitado)
-    local user_prefix = "## " .. (config.options.user_name or "User") .. " >> "
-    
-    if initial_content then
+    -- Popula conteúdo inicial
+    local user_prefix = "## " .. config.options.user_name .. " >> "
+    if initial_content and initial_content ~= "" then
         local init_lines = vim.split(initial_content, "\n", { plain = true })
         api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
-        api.nvim_buf_set_lines(buf, -1, -1, false, { "", user_prefix })
-    elseif api.nvim_buf_line_count(buf) <= 1 then
-        -- Se o buffer estiver vazio, inicia com o prefixo
+        local last_line = init_lines[#init_lines] or ""
+        if not last_line:match("^## " .. config.options.user_name .. " >>") then
+            api.nvim_buf_set_lines(buf, -1, -1, false, { "", user_prefix })
+        end
+    else
         api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
     end
 
-    -- 7. Posiciona o cursor no final do arquivo (Corrigido: agora dentro da função)
     local last_ln  = api.nvim_buf_line_count(buf)
     local last_txt = api.nvim_buf_get_lines(buf, last_ln - 1, last_ln, false)[1] or ""
     api.nvim_win_set_cursor(win, { last_ln, #last_txt })
 
-    -- 8. Estética e Folds
     hl.apply_chat(buf)
-    M._setup_folds(win)
+    M._setup_folds()
 
     return buf, win
 end
 
--- Configura as dobras baseadas nos headers da IA
-function M._setup_folds(win)
-    local target_win = win or M.popup_win
-    if not target_win or not api.nvim_win_is_valid(target_win) then return end
-    
-    vim.wo[target_win].foldmethod = 'marker'
-    vim.wo[target_win].foldmarker = '## IA >>,## API atual:'
-    vim.wo[target_win].foldlevel  = 99
+function M._setup_folds()
+    if not M.popup_win or not api.nvim_win_is_valid(M.popup_win) then return end
+    vim.wo[M.popup_win].foldmethod = 'marker'
+    vim.wo[M.popup_win].foldmarker = '## IA >>,## API atual:'
+    vim.wo[M.popup_win].foldlevel  = 99
 end
 
--- Atualiza o título da janela com a API atual
 function M.update_title()
     if not M.popup_win or not api.nvim_win_is_valid(M.popup_win) then return end
     local api_name = require('multi_context.config').get_current_api()
@@ -119,7 +109,5 @@ function M.update_title()
     api.nvim_win_set_config(M.popup_win, { title = title, title_pos = 'center' })
 end
 
--- Alias para compatibilidade
 M.create_folds = M._setup_folds
-
 return M

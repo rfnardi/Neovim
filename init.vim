@@ -51,8 +51,6 @@ require('multi_context').setup({
         width = 0.8,
         height = 0.7,
         title = " 🤖 MultiContext AI ",
-				config_path = vim.fn.expand('~/.config/nvim/context_apis.json'),
-				api_keys_path = vim.fn.expand('~/.config/nvim/api_keys.json'),
     }
 })
 EOF
