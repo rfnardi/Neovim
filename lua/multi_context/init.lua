@@ -62,35 +62,20 @@ M.current_workspace_file = nil
 
 M.ToggleWorkspaceView = function()
     local ui_popup = require('multi_context.ui.popup')
-    local win = vim.api.nvim_get_current_win()
-    local config = vim.api.nvim_win_get_config(win)
+    local is_popup = (ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) and vim.api.nvim_get_current_win() == ui_popup.popup_win)
 
-    -- CENÁRIO A: Saindo do Popup para o Workspace
-    if config.relative ~= "" then
-        if ui_popup.popup_buf and vim.api.nvim_buf_is_valid(ui_popup.popup_buf) then
-            local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
-            local content = table.concat(lines, "\n")
-            
-            -- Fecha o popup
-            vim.api.nvim_win_close(ui_popup.popup_win, true)
-            
-            -- Exporta usando o nome salvo (se existir) para não duplicar
-            M.current_workspace_file = require('multi_context.utils').export_to_workspace(content, M.current_workspace_file)
-        end
-
-    -- CENÁRIO B: Voltando do Workspace para o Popup
+    if is_popup then
+        local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
+        local content = table.concat(lines, "\n")
+        vim.api.nvim_win_close(ui_popup.popup_win, true)
+        M.current_workspace_file = require('multi_context.utils').export_to_workspace(content, M.current_workspace_file)
     else
         local cur_buf = vim.api.nvim_get_current_buf()
-        local lines = vim.api.nvim_buf_get_lines(cur_buf, 0, -1, false)
-        local content = table.concat(lines, "\n")
-        
-        -- Salva o nome do arquivo atual para que o próximo <A-w> volte para ele
         local name = vim.api.nvim_buf_get_name(cur_buf)
-        if name:match("multi_context_chats") then
+        if name:match("multi_context_chats.*%.md$") then
             M.current_workspace_file = name
-        end
-        
-        if content ~= "" then
+            local lines = vim.api.nvim_buf_get_lines(cur_buf, 0, -1, false)
+            local content = table.concat(lines, "\n")
             ui_popup.create_popup(content)
         end
     end
@@ -126,22 +111,21 @@ M.SendFromPopup = function()
         messages,
 
         -- on_chunk: acumula e renderiza em tempo real
-				function(chunk, _)
-					accumulated = accumulated .. chunk
-					local now = vim.loop.now()
-						if now - last_render > 50 then
-								last_render = now
-								vim.schedule(function()
-										if vim.api.nvim_buf_is_valid(buf) then
-												vim.bo[buf].modifiable = true
-												vim.api.nvim_buf_set_lines(buf, resp_start, -1, false,
-														utils.split_lines(accumulated))
-										end
-										vim.notify("MultiContext: " .. msg, vim.log.levels.ERROR)
-								end)
-						end
-				end,
-
+        function(chunk, _)
+            if chunk and chunk ~= "" then
+                accumulated = accumulated .. chunk
+                local now = vim.loop.now()
+                if now - last_render > 50 then
+                    last_render = now
+                    vim.schedule(function()
+                        if vim.api.nvim_buf_is_valid(buf) then
+                            vim.bo[buf].modifiable = true
+                            vim.api.nvim_buf_set_lines(buf, resp_start, -1, false, utils.split_lines(accumulated))
+                        end
+                    end)
+                end
+            end
+        end,
         -- on_done: insere rodapé e posiciona cursor no próximo prompt
         function(entry)
             utils.insert_after(buf, -1, {
@@ -167,12 +151,15 @@ end
 -- ── Comandos Vim ──────────────────────────────────────────────────────────────
 
 vim.cmd([[
-  command! Context        lua require('multi_context').Context()
-  command! ContextBuffers lua require('multi_context').ContextBuffers()
-  command! ContextTree    lua require('multi_context').ContextTree()
-  command! ContextRepo    lua require('multi_context').ContextRepo()
-  command! ContextApis    lua require('multi_context').ContextApis()
-  command! ContextQueue   lua require('multi_context').ContextQueue()
+  command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
+  command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
+  command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()
+  command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
+  command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
+  command! -nargs=0 ContextTree lua require('multi_context').ContextTree()
+  command! -nargs=0 ContextBuffers lua require('multi_context').ContextBuffers()
+  command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
+  command! -nargs=0 ContextQueue lua require('multi_context').ContextQueue()
 ]])
 
 return M

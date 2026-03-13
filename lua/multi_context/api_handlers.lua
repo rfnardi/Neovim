@@ -57,37 +57,25 @@ end
 M.gemini = {
     make_request = function(api_config, messages, api_keys, last_sig, callback)
         local api_key  = api_keys[api_config.name] or ""
-        local contents = {}
-        local sys_inst = nil
+        
+        -- DEBUG: Verificar se a chave está chegando
+        if api_key == "" then 
+            vim.notify("ERRO: Chave para " .. api_config.name .. " está vazia!", 3) 
+        end
 
+        local contents = {}
         for _, msg in ipairs(messages) do
-            if msg.role == "system" then
-                sys_inst = { parts = {{ text = msg.content }} }
-            else
-                local part = { text = msg.content }
-                if msg.role == "model" and last_sig then
-                    part.thoughtSignature = last_sig
-                end
+            if msg.role ~= "system" then
                 table.insert(contents, {
-                    role  = msg.role == "user" and "user" or "model",
-                    parts = { part },
+                    role  = (msg.role == "user") and "user" or "model",
+                    parts = { { text = msg.content } },
                 })
             end
         end
 
-        local gen_cfg = {}
-        local model   = api_config.model or ""
-        if model:match("2%.5") or model:match("thinking") then
-            gen_cfg.thinkingConfig = { thinkingLevel = "medium" }
-        end
-
-        local payload = {
-            contents           = contents,
-            system_instruction = sys_inst,
-            generationConfig   = next(gen_cfg) ~= nil and gen_cfg or nil,
-        }
-
+        local payload = { contents = contents }
         local url = api_config.url:gsub(":generateContent", ":streamGenerateContent")
+        
         local cmd = {
             "curl", "-s", "-N", "-L", "-X", "POST",
             url .. "?key=" .. api_key,
@@ -95,42 +83,31 @@ M.gemini = {
             "-d", vim.fn.json_encode(payload),
         }
 
-        local partial = ""
-    endlocal partial = ""
+        local buffer = ""
         vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
                 if not data then return end
-                for _, line in ipairs(data) do
-                    partial = partial .. line
-                    
-                    -- Tenta decodificar o que acumulamos até agora
-                    -- O Gemini stream usa um formato onde cada objeto é delimitado por vírgulas dentro de um array [ ]
-                    local json_obj = partial:gsub("^%s*,?%s*%[%s*", ""):gsub("%s*,?%s*%]%s*$", ""):gsub("^%s*,%s*", "")
-                    
-                    local ok, decoded = pcall(vim.fn.json_decode, json_obj)
-                    if ok then
-                        if decoded.candidates and decoded.candidates[1].content then
-                            local text = decoded.candidates[1].content.parts[1].text
-                            if text then
-                                callback(text, nil, false)
-                                partial = "" -- Limpa apenas se decodificou um objeto completo
-                            end
-                        end
-                    end
+                local raw = table.concat(data, "")
+                if raw == "" then return end
+                buffer = buffer .. raw
+                local chunks, rest = extract_text_chunks(buffer)
+                for _, txt in ipairs(chunks) do
+                    callback(txt, nil, false)
                 end
+                buffer = rest
             end,
             on_stderr = function(_, data)
                 local err = table.concat(data, "")
-                if err ~= "" and not err:match("%% Total") then 
-                    vim.schedule(function()
-                        vim.notify("Curl Error: " .. err, vim.log.levels.ERROR)
-                    end)
+                if err ~= "" and not err:match("%%") then
+                    print("DEBUG CURL ERR: " .. err)
                 end
             end,
-            on_exit = function() 
-                callback(nil, nil, true) 
+            on_exit = function(_, code)
+                -- print("DEBUG JOB EXIT: " .. code)
+                callback(nil, nil, true)
             end,
-        }),
+        })
+    end,
 }
 
 -- ── OpenAI-compatible (OpenAI, Moonshot/Kimi, DeepSeek, Groq, OpenRouter…) ────
@@ -151,14 +128,15 @@ M.openai = {
 
         vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
-                for _, line in ipairs(data or {}) do
-                    if line:match("^data: ") and not line:match("%[DONE%]") then
-                        local ok, dec = pcall(vim.fn.json_decode, line:sub(7))
-                        if ok and dec.choices and dec.choices[1].delta then
-                            callback(dec.choices[1].delta.content, nil, false)
-                        end
-                    end
+                if not data then return end
+                local raw = table.concat(data, "")
+                if raw == "" then return end
+                buffer = buffer .. raw
+                local chunks, rest = extract_text_chunks(buffer)
+                for _, txt in ipairs(chunks) do
+                    callback(txt, nil, false)
                 end
+                buffer = rest
             end,
             on_exit = function() callback(nil, nil, true) end,
         })
@@ -179,7 +157,15 @@ M.cloudflare = {
         local output = ""
         vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
-                if data then output = output .. table.concat(data, "") end
+                if not data then return end
+                local raw = table.concat(data, "")
+                if raw == "" then return end
+                buffer = buffer .. raw
+                local chunks, rest = extract_text_chunks(buffer)
+                for _, txt in ipairs(chunks) do
+                    callback(txt, nil, false)
+                end
+                buffer = rest
             end,
             on_exit = function()
                 local ok, dec = pcall(vim.fn.json_decode, output)
