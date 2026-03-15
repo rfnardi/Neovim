@@ -56,7 +56,7 @@ function M.create_popup(initial_content)
     api.nvim_create_autocmd("WinClosed", {
         pattern  = tostring(win),
         once     = true,
-        callback = function() M.popup_win = nil; M.popup_buf = nil end,
+        callback = function() M.popup_win = nil end,
     })
 
     api.nvim_create_autocmd("BufWipeout", {
