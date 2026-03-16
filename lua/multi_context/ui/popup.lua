@@ -4,78 +4,97 @@ local M   = {}
 M.popup_buf = nil
 M.popup_win = nil
 
-function M.create_popup(initial_content)
-	if M.popup_win and api.nvim_win_is_valid(M.popup_win) then
-		api.nvim_set_current_win(M.popup_win)
-		return M.popup_buf, M.popup_win
-	end
+function M.create_popup(initial_content_or_bufnr)
+    if M.popup_win and api.nvim_win_is_valid(M.popup_win) then
+        api.nvim_set_current_win(M.popup_win)
+        return M.popup_buf, M.popup_win
+    end
 
-	local config = require('multi_context.config')
-	local hl     = require('multi_context.ui.highlights')
+    local config = require('multi_context.config')
+    local hl     = require('multi_context.ui.highlights')
+    
+    local buf
+    
+    -- Se o argumento for um número, é um buffer existente (vindo do Workspace)
+    if type(initial_content_or_bufnr) == "number" and api.nvim_buf_is_valid(initial_content_or_bufnr) then
+        buf = initial_content_or_bufnr
+    else
+        buf = api.nvim_create_buf(false, true)
+        vim.bo[buf].buftype   = 'nofile'
+        vim.bo[buf].bufhidden = 'hide'
+        vim.bo[buf].swapfile  = false
+        
+        -- Injeta conteúdo apenas se for um buffer novo
+        local user_prefix = "## " .. config.options.user_name .. " >> "
+        if type(initial_content_or_bufnr) == "string" and initial_content_or_bufnr ~= "" then
+            local init_lines = vim.split(initial_content_or_bufnr, "\n", { plain = true })
+            api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
+            
+            -- Procura se a última linha não vazia já é um prompt
+            local has_prompt = false
+            for i = #init_lines, 1, -1 do
+                if init_lines[i] ~= "" then
+                    if init_lines[i]:match("^## " .. config.options.user_name .. " >>") then
+                        has_prompt = true
+                    end
+                    break
+                end
+            end
+            
+            if not has_prompt then
+                api.nvim_buf_set_lines(buf, -1, -1, false, { "", user_prefix })
+            end
+        else
+            api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
+        end
+    end
 
-	local buf = api.nvim_create_buf(false, true)
-	M.popup_buf = buf
+    M.popup_buf = buf
+    vim.bo[buf].filetype  = 'multicontext_chat'
 
-	vim.bo[buf].buftype   = 'nofile'
-	vim.bo[buf].filetype  = 'multicontext_chat'
-	vim.bo[buf].bufhidden = 'hide'
-	vim.bo[buf].swapfile  = false
+    local km = { noremap = true, silent = true }
+    api.nvim_buf_set_keymap(buf, "n", "<CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<C-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<S-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "n", "<S-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
 
-	local km = { noremap = true, silent = true }
-	api.nvim_buf_set_keymap(buf, "n", "<CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-	api.nvim_buf_set_keymap(buf, "i", "<C-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-	api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-	api.nvim_buf_set_keymap(buf, "i", "<S-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-	api.nvim_buf_set_keymap(buf, "n", "<S-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
+    api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", km)
 
-	api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
-	api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
-	api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", km)
+    local width  = math.ceil(vim.o.columns * 0.8)
+    local height = math.ceil(vim.o.lines   * 0.8)
+    local row    = math.ceil((vim.o.lines   - height) / 2)
+    local col    = math.ceil((vim.o.columns - width)  / 2)
 
-	local width  = math.ceil(vim.o.columns * 0.8)
-	local height = math.ceil(vim.o.lines   * 0.8)
-	local row    = math.ceil((vim.o.lines   - height) / 2)
-	local col    = math.ceil((vim.o.columns - width)  / 2)
+    local win = api.nvim_open_win(buf, true, {
+        relative  = 'editor',
+        width     = width,
+        height    = height,
+        row       = row,
+        col       = col,
+        style     = 'minimal',
+        border    = 'rounded',
+        title     = " Multi_Context_Chat ",
+        title_pos = 'center',
+    })
+    M.popup_win = win
 
-	local win = api.nvim_open_win(buf, true, {
-		relative  = 'editor',
-		width     = width,
-		height    = height,
-		row       = row,
-		col       = col,
-		style     = 'minimal',
-		border    = 'rounded',
-		title     = " Multi_Context_Chat ",
-		title_pos = 'center',
-	})
-	M.popup_win = win
+    api.nvim_create_autocmd("WinClosed", {
+        pattern  = tostring(win),
+        once     = true,
+        callback = function() M.popup_win = nil end,
+    })
 
-	api.nvim_create_autocmd("WinClosed", {
-		pattern  = tostring(win),
-		once     = true,
-		callback = function() M.popup_win = nil end,
-	})
+    local last_ln  = api.nvim_buf_line_count(buf)
+    local last_txt = api.nvim_buf_get_lines(buf, last_ln - 1, last_ln, false)[1] or ""
+    api.nvim_win_set_cursor(win, { last_ln, #last_txt })
 
-	local user_prefix = "## " .. config.options.user_name .. " >> "
-	if initial_content and initial_content ~= "" then
-		local init_lines = vim.split(initial_content, "\n", { plain = true })
-		api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
-		local last_line = init_lines[#init_lines] or ""
-		if not last_line:match("^## " .. config.options.user_name .. " >>") then
-			api.nvim_buf_set_lines(buf, -1, -1, false, { "", user_prefix })
-		end
-	else
-		api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
-	end
+    hl.apply_chat(buf)
+    M.create_folds(buf)
 
-	local last_ln  = api.nvim_buf_line_count(buf)
-	local last_txt = api.nvim_buf_get_lines(buf, last_ln - 1, last_ln, false)[1] or ""
-	api.nvim_win_set_cursor(win, { last_ln, #last_txt })
-
-	hl.apply_chat(buf)
-	M.create_folds(buf)
-
-	return buf, win
+    return buf, win
 end
 
 function M.fold_text()

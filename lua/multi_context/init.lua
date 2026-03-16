@@ -74,18 +74,23 @@ M.ToggleWorkspaceView = function()
     local is_popup = (ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) and vim.api.nvim_get_current_win() == ui_popup.popup_win)
 
     if is_popup then
+        -- Se estiver no popup, pega o conteúdo, fecha o popup e abre o arquivo .mctx em tela cheia
         local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
         local content = table.concat(lines, "\n")
-        vim.api.nvim_win_hide(ui_popup.popup_win) -- hide para preservar memória
+        vim.api.nvim_win_hide(ui_popup.popup_win)
         M.current_workspace_file = utils.export_to_workspace(content, M.current_workspace_file)
     else
+        -- Se estiver em tela cheia (workspace), não copia o texto.
+        -- Apenas manda o popup FLUTUAR SOBRE o buffer atual do .mctx!
         local cur_buf = vim.api.nvim_get_current_buf()
         local name = vim.api.nvim_buf_get_name(cur_buf)
         if name:match("multi_context_chats.*%.mctx$") then
             M.current_workspace_file = name
-            local lines = vim.api.nvim_buf_get_lines(cur_buf, 0, -1, false)
-            local content = table.concat(lines, "\n")
-            ui_popup.create_popup(content)
+            
+            -- Passa o ID numérico do buffer para reutilizar o buffer vivo!
+            ui_popup.create_popup(cur_buf)
+        else
+            vim.notify("Você não está em um arquivo de workspace (.mctx).", vim.log.levels.WARN)
         end
     end
 end
