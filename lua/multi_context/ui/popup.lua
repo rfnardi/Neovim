@@ -92,100 +92,84 @@ function M.create_popup(initial_content)
     return buf, win
 end
 
+-- Função que dita AS REGRAS matemáticas de onde as dobras começam
+-- Função que dita AS REGRAS matemáticas de onde as dobras começam
+function M.fold_expr(lnum)
+    local line = vim.fn.getline(lnum)
+    local prev_line = vim.fn.getline(lnum - 1)
+    local next_line = vim.fn.getline(lnum + 1)
+
+    -- Padrões que identificam títulos e cabeçalhos
+    local is_header = function(s)
+        if not s then return false end
+        -- Exceção: o rodapé da API não é um título principal
+        if s:match("^## API atual:") then return false end
+        
+        return s:match("^===") or s:match("^== Arquivo:") or s:match("^## ")
+    end
+
+    -- 1. Cabeçalhos ficam SEMPRE visíveis (nível 0 de dobra)
+    if is_header(line) then
+        return "0"
+    end
+
+    -- 2. Se uma linha em branco antecede o próximo cabeçalho, ela encerra a dobra (nível 0)
+    -- Isso garante que as dobras não se misturem
+    if line == "" and is_header(next_line) then
+        return "0"
+    end
+
+    -- 3. Se a linha de cima foi um cabeçalho, ESTA linha COMEÇA a dobra do conteúdo
+    if is_header(prev_line) then
+        return ">1"
+    end
+
+    -- 4. Todo o resto do texto acompanha a dobra atual
+    return "="
+end
+
+-- Função para deixar o visual do texto ocultado bem elegante
+function M.fold_text()
+    local lines_count = vim.v.foldend - vim.v.foldstart + 1
+    local first_line = vim.fn.getline(vim.v.foldstart)
+    -- Mostra uma setinha, a quantidade de linhas ocultas, e a primeira linha do código
+    return "    ↳ ⋯ [" .. lines_count .. " linhas ocultas] ⋯  " .. vim.trim(first_line)
+end
+
 function M.create_folds(buf)
     if not buf or not api.nvim_buf_is_valid(buf) then return end
-    local config = require('multi_context.config')
-    local user_name = config.options.user_name or "User"
-    local total_lines = api.nvim_buf_line_count(buf)
-
-    -- Configuração blindada do método de dobras atrelado ao buffer/janela ativados
+    
+    -- Aplica as regras matemáticas e blinda o buffer contra o Markdown
     vim.api.nvim_buf_call(buf, function()
-        vim.opt_local.foldmethod = "manual"
-        vim.opt_local.foldexpr = ""
+        vim.opt_local.foldmethod = "expr"
+        vim.opt_local.foldexpr = "v:lua.require('multi_context.ui.popup').fold_expr(v:lnum)"
+        vim.opt_local.foldtext = "v:lua.require('multi_context.ui.popup').fold_text()"
         vim.opt_local.foldenable = true
-        vim.opt_local.foldlevel = 1
-        pcall(vim.cmd, 'normal! zE') -- Limpa folds existentes
+        vim.opt_local.foldlevel = 0 -- Inicia fechando todos os conteúdos
     end)
-
-    local headers = {}
-    for i = 0, total_lines - 1 do
-        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
-        if line and (line:match("^## " .. user_name .. " >>") or line:match("^## IA") or 
-            line:match("^===") or line:match("^==")) then
-            table.insert(headers, {line = i, type = "foldable"})
-        elseif line and line:match("^## API atual:") then
-            table.insert(headers, {line = i, type = "api_info"})
-        end
-    end
-
-    table.sort(headers, function(a, b) return a.line < b.line end)
-
-    local last_ia_header_index = nil
-    for i = #headers, 1, -1 do
-        if headers[i].type == "foldable" and headers[i].line and api.nvim_buf_get_lines(buf, headers[i].line, headers[i].line + 1, false)[1]:match("^## IA") then
-            last_ia_header_index = i
-            break
-        end
-    end
-
-    for i = 1, #headers do
-        local current_header = headers[i]
-        if current_header.type ~= "api_info" then
-            local fold_start = current_header.line + 1
-            local fold_end = total_lines - 1
-
-            for j = i + 1, #headers do
-                fold_end = headers[j].line - 1
+    
+    -- Abre estrategicamente apenas o seu prompt atual e a última resposta da IA
+    vim.api.nvim_buf_call(buf, function()
+        local total = vim.api.nvim_buf_line_count(buf)
+        
+        -- Tenta abrir a dobra da última linha (onde você vai digitar)
+        pcall(vim.cmd, "silent! " .. total .. "foldopen!")
+        
+        -- Procura de baixo pra cima a última IA e mantém a resposta dela aberta
+        for i = total, 1, -1 do
+            local line = vim.api.nvim_buf_get_lines(buf, i-1, i, false)[1]
+            if line and line:match("^## IA") then
+                -- O título da IA (linha 'i') é nível 0, então abrimos a dobra do conteúdo (i+1)
+                pcall(vim.cmd, "silent! " .. (i + 1) .. "foldopen!")
                 break
             end
-
-            if fold_start <= fold_end then
-                vim.api.nvim_buf_call(buf, function()
-                    pcall(vim.cmd, string.format("%d,%dfold", fold_start + 1, fold_end + 1))
-                end)
-            end
         end
-    end
-
-    for i = 1, #headers do
-        local current_header = headers[i]
-        if current_header.type == "foldable" and i ~= last_ia_header_index then
-            local fold_start = current_header.line + 1
-            local fold_end = total_lines - 1
-
-            for j = i + 1, #headers do
-                fold_end = headers[j].line - 1
-                break
-            end
-
-            if fold_start <= fold_end then
-                vim.api.nvim_buf_call(buf, function()
-                    pcall(vim.cmd, string.format("%d,%dfoldclose", fold_start + 1, fold_end + 1))
-                end)
-            end
-        end
-    end
-
-    if last_ia_header_index then
-        local last_ia_header = headers[last_ia_header_index]
-        local fold_start = last_ia_header.line + 1
-        local fold_end = total_lines - 1
-
-        for j = last_ia_header_index + 1, #headers do
-            fold_end = headers[j].line - 1
-            break
-        end
-
-        if fold_start <= fold_end then
-            vim.api.nvim_buf_call(buf, function()
-                pcall(vim.cmd, string.format("%dfoldopen!", fold_start + 1))
-            end)
-        end
-    end
+    end)
 end
 
 function M.update_title()
-    -- Função agora vazia: impede que a API dinâmica mude o título fixo.
+    -- Vazio propositalmente para não sobrescrever o título fixo da janela
 end
 
 return M
+

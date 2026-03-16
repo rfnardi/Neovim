@@ -30,12 +30,6 @@ M.export_to_workspace = function(content, existing_filename)
     -- Configura o buffer
     vim.bo[new_buf].filetype = "markdown"
     
-    -- Desativa as dobras nativas do markdown na janela atual
-    vim.wo[0].foldmethod = "manual"
-    vim.wo[0].foldexpr = ""
-    vim.wo[0].foldenable = true
-    vim.wo[0].foldlevel = 1
-    
     local lines = M.split_lines(content)
     
     -- Atualiza o conteúdo total do buffer
