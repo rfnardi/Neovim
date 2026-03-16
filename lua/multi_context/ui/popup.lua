@@ -37,7 +37,6 @@ function M.create_popup(initial_content)
     local row    = math.ceil((vim.o.lines   - height) / 2)
     local col    = math.ceil((vim.o.columns - width)  / 2)
 
-    -- >>> TÍTULO FIXO REQUISITADO <<<
     local title = " Multi_Context_Chat "
 
     local win = api.nvim_open_win(buf, true, {
@@ -81,30 +80,32 @@ function M.create_popup(initial_content)
         api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
     end
 
-    -- Configuração de folds manual antes de aplicar a varredura
-    api.nvim_buf_set_option(buf, "foldmethod", "manual")
-    api.nvim_buf_set_option(buf, "foldenable", true)
-    api.nvim_buf_set_option(buf, "foldlevel", 1)
-
     local last_ln  = api.nvim_buf_line_count(buf)
     local last_txt = api.nvim_buf_get_lines(buf, last_ln - 1, last_ln, false)[1] or ""
     api.nvim_win_set_cursor(win, { last_ln, #last_txt })
 
     hl.apply_chat(buf)
+    
+    -- Aqui os folds são aplicados de forma segura (sem referenciar o ID da janela diretamente)
     M.create_folds(buf)
 
     return buf, win
 end
 
--- >>> FUNÇÃO DE FOLDS CLÁSSICA RECUPERADA <<<
 function M.create_folds(buf)
     if not buf or not api.nvim_buf_is_valid(buf) then return end
     local config = require('multi_context.config')
     local user_name = config.options.user_name or "User"
     local total_lines = api.nvim_buf_line_count(buf)
 
-    -- Limpar folds existentes
-    vim.api.nvim_buf_call(buf, function() pcall(vim.cmd, 'normal! zE') end)
+    -- Configuração blindada do método de dobras atrelado ao buffer/janela ativados
+    vim.api.nvim_buf_call(buf, function()
+        vim.opt_local.foldmethod = "manual"
+        vim.opt_local.foldexpr = ""
+        vim.opt_local.foldenable = true
+        vim.opt_local.foldlevel = 1
+        pcall(vim.cmd, 'normal! zE') -- Limpa folds existentes
+    end)
 
     local headers = {}
     for i = 0, total_lines - 1 do

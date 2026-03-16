@@ -67,4 +67,50 @@ M.get_visual_selection = function(line1, line2)
         .. table.concat(api.nvim_buf_get_lines(buf, s - 1, e, false), "\n")
 end
 
+-- Pega os arquivos apenas na pasta atual de trabalho (sem subpastas/árvore)
+M.get_folder_context = function()
+    local dir = vim.fn.getcwd()
+    local found = vim.fn.split(
+        vim.fn.system("find " .. vim.fn.shellescape(dir) .. " -maxdepth 1 -type f"), "\n"
+    )
+    
+    local ctx = { "=== CONTEÚDO DA PASTA ATUAL (" .. dir .. ") ===" }
+    for _, f in ipairs(found) do
+        if not f:match("/%.git/") and f ~= "" then
+            table.insert(ctx, "")
+            table.insert(ctx, "== Arquivo: " .. f .. " ==")
+            local ok, lines = pcall(vim.fn.readfile, f)
+            if ok then
+                for _, l in ipairs(lines) do table.insert(ctx, l) end
+            end
+        end
+    end
+    return table.concat(ctx, "\n")
+end
+
+-- Pega TODOS os arquivos trackeados pelo repositório Git atual
+M.get_repo_context = function()
+    vim.fn.system("git rev-parse --show-toplevel")
+    if vim.v.shell_error ~= 0 then return "=== Não é um repositório Git ===" end
+    
+    -- Descobre a raiz do repo
+    local root = vim.fn.system("git rev-parse --show-toplevel"):gsub("\n", "")
+    -- Usa ls-files para pegar os arquivos gerenciados pelo Git (ignora node_modules/binários ignorados, etc)
+    local tracked_files = vim.fn.split(vim.fn.system("git -C " .. vim.fn.shellescape(root) .. " ls-files"), "\n")
+    
+    local ctx = { "=== CONTEÚDO DE TODO O REPOSITÓRIO GIT ===" }
+    for _, f in ipairs(tracked_files) do
+        if f ~= "" then
+            local full_path = root .. "/" .. f
+            table.insert(ctx, "")
+            table.insert(ctx, "== Arquivo: " .. f .. " ==")
+            local ok, lines = pcall(vim.fn.readfile, full_path)
+            if ok then
+                for _, l in ipairs(lines) do table.insert(ctx, l) end
+            end
+        end
+    end
+    return table.concat(ctx, "\n")
+end
+
 return M

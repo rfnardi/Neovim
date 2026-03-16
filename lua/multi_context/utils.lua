@@ -22,29 +22,39 @@ M.export_to_workspace = function(content, existing_filename)
         filename = chat_dir .. "/chat_" .. timestamp .. ".md"
     end
     
-    -- Abre o arquivo (se já estiver aberto, apenas foca)
+    -- Abre o buffer com o nome do arquivo, mas NÃO salva ainda
     vim.cmd("edit " .. filename)
     
     local new_buf = vim.api.nvim_get_current_buf()
     
     -- Configura o buffer
     vim.bo[new_buf].filetype = "markdown"
+    
+    -- Desativa as dobras nativas do markdown na janela atual
+    vim.wo[0].foldmethod = "manual"
+    vim.wo[0].foldexpr = ""
+    vim.wo[0].foldenable = true
+    vim.wo[0].foldlevel = 1
+    
     local lines = M.split_lines(content)
     
-    -- Atualiza o conteúdo total
+    -- Atualiza o conteúdo total do buffer
     vim.api.nvim_buf_set_lines(new_buf, 0, -1, false, lines)
     
-    -- Salva
-    vim.cmd("write")
+    -- Sinaliza pro NeoVim que o arquivo tem alterações não salvas
+    vim.bo[new_buf].modified = true
     
-    -- Ponto 1: Cursor na última linha em modo normal
+    -- Cursor na última linha em modo normal
     local last_line = vim.api.nvim_buf_line_count(new_buf)
     vim.api.nvim_win_set_cursor(0, { last_line, 0 })
     
     -- Garante que saia de qualquer modo de inserção residual
     vim.cmd("stopinsert")
     
-    return filename -- Retorna para podermos rastrear
+    -- Replica os seus folds customizados no Workspace
+    require('multi_context.ui.popup').create_folds(new_buf)
+    
+    return filename
 end
 
 M.split_lines = function(s)

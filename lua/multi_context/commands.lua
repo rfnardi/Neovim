@@ -27,20 +27,32 @@ end
 
 M.ContextChatFull = function() open_with("") end
 
-M.ContextBuffers  = function()
-    open_with(require('multi_context.context_builders').get_all_buffers_content())
+-- :ContextFolder -> APENAS a pasta onde o nvim foi aberto
+M.ContextChatFolder = function()
+    open_with(require('multi_context.context_builders').get_folder_context())
 end
 
-M.ContextTree     = function()
+-- :ContextTree -> Árvore (tree) + Conteúdo (maxdepth 2)
+M.ContextTree = function()
     open_with(require('multi_context.context_builders').get_tree_context())
 end
 
-M.ContextChatGit  = function()
+-- :ContextRepo -> Todos os arquivos do repositório Git
+M.ContextChatRepo = function()
+    open_with(require('multi_context.context_builders').get_repo_context())
+end
+
+-- :ContextGit -> Diff de alterações não commitadas (git diff)
+M.ContextChatGit = function()
     open_with(require('multi_context.context_builders').get_git_diff())
 end
 
-M.ContextApis     = function()
+M.ContextApis = function()
     require('multi_context.api_selector').open_api_selector()
+end
+
+M.ContextBuffers  = function()
+    open_with(require('multi_context.context_builders').get_all_buffers_content())
 end
 
 return M
