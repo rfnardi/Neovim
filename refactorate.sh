@@ -1,207 +1,27 @@
 #!/bin/bash
 
-echo "Corrigindo a lógica de criação de buffer do Popup..."
+echo "Registrando os comandos no Neovim..."
 
-cat << 'EOF' > lua/multi_context/ui/popup.lua
-local api = vim.api
-local M   = {}
-
-M.popup_buf = nil
-M.popup_win = nil
-
-function M.create_popup(initial_content)
-    -- 1. Se a janela já existe e está aberta, apenas foca nela
-    if M.popup_win and api.nvim_win_is_valid(M.popup_win) then
-        api.nvim_set_current_win(M.popup_win)
-        return M.popup_buf, M.popup_win
-    end
-
-    local config = require('multi_context.config')
-    local hl     = require('multi_context.ui.highlights')
-    local buf
-
-    -- 2. AQUI ESTÁ O SEGREDO: Se o buffer já existe e está salvo na memória, REAPROVEITA ELE!
-    if M.popup_buf and api.nvim_buf_is_valid(M.popup_buf) then
-        buf = M.popup_buf
-    else
-        -- 3. Se não existe, aí sim cria um buffer do zero
-        buf = api.nvim_create_buf(false, true)
-        M.popup_buf = buf
-
-        vim.bo[buf].buftype   = 'nofile'
-        vim.bo[buf].filetype  = 'markdown'
-        vim.bo[buf].bufhidden = 'hide'
-        vim.bo[buf].swapfile  = false
-
-        local km = { noremap = true, silent = true }
-        api.nvim_buf_set_keymap(buf, "n", "<CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-        api.nvim_buf_set_keymap(buf, "i", "<C-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-        api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-        api.nvim_buf_set_keymap(buf, "i", "<S-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-        api.nvim_buf_set_keymap(buf, "n", "<S-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
-
-        api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
-        api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
-        api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", km)
-
-        -- Preenche o conteúdo inicial APENAS na criação do buffer
-        local user_prefix = "## " .. config.options.user_name .. " >> "
-        if initial_content and initial_content ~= "" then
-            local init_lines = vim.split(initial_content, "\n", { plain = true })
-            api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
-            local last_line = init_lines[#init_lines] or ""
-            if not last_line:match("^## " .. config.options.user_name .. " >>") then
-                api.nvim_buf_set_lines(buf, -1, -1, false, { "", user_prefix })
-            end
-        else
-            api.nvim_buf_set_lines(buf, 0, -1, false, { user_prefix })
-        end
-    end
-
-    -- 4. Abre a janela flutuante com o buffer (seja o novo ou o reaproveitado)
-    local width  = math.ceil(vim.o.columns * 0.8)
-    local height = math.ceil(vim.o.lines   * 0.8)
-    local row    = math.ceil((vim.o.lines   - height) / 2)
-    local col    = math.ceil((vim.o.columns - width)  / 2)
-
-    local title = " Multi_Context_Chat "
-
-    local win = api.nvim_open_win(buf, true, {
-        relative  = 'editor',
-        width     = width,
-        height    = height,
-        row       = row,
-        col       = col,
-        style     = 'minimal',
-        border    = 'rounded',
-        title     = title,
-        title_pos = 'center',
-    })
-    M.popup_win = win
-
-    -- Limpa a variável DA JANELA quando ela é fechada (mas MANTÉM a do BUFFER intacta)
-    api.nvim_create_autocmd("WinClosed", {
-        pattern  = tostring(win),
-        once     = true,
-        callback = function() M.popup_win = nil end,
-    })
-
-    -- Se o Neovim decidir deletar fisicamente o buffer por falta de memória (Bwipeout), aí limpamos
-    api.nvim_create_autocmd("BufWipeout", {
-        buffer   = buf,
-        once     = true,
-        callback = function()
-            if vim.api.nvim_buf_is_valid(buf) then
-                vim.bo[buf].modifiable = true
-            end
-            M.popup_buf = nil
-        end,
-    })
-
-    -- Aplica Folds e Highlights e bota o cursor no final
-    api.nvim_buf_set_option(buf, "foldmethod", "manual")
-    api.nvim_buf_set_option(buf, "foldenable", true)
-    api.nvim_buf_set_option(buf, "foldlevel", 1)
-
-    local last_ln  = api.nvim_buf_line_count(buf)
-    local last_txt = api.nvim_buf_get_lines(buf, last_ln - 1, last_ln, false)[1] or ""
-    api.nvim_win_set_cursor(win, { last_ln, #last_txt })
-
-    hl.apply_chat(buf)
-    M.create_folds(buf)
-
-    return buf, win
-end
-
-function M.create_folds(buf)
-    if not buf or not api.nvim_buf_is_valid(buf) then return end
-    local config = require('multi_context.config')
-    local user_name = config.options.user_name or "User"
-    local total_lines = api.nvim_buf_line_count(buf)
-
-    vim.api.nvim_buf_call(buf, function() pcall(vim.cmd, 'normal! zE') end)
-
-    local headers = {}
-    for i = 0, total_lines - 1 do
-        local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
-        if line and (line:match("^## " .. user_name .. " >>") or line:match("^## IA") or 
-            line:match("^===") or line:match("^==")) then
-            table.insert(headers, {line = i, type = "foldable"})
-        elseif line and line:match("^## API atual:") then
-            table.insert(headers, {line = i, type = "api_info"})
-        end
-    end
-
-    table.sort(headers, function(a, b) return a.line < b.line end)
-
-    local last_ia_header_index = nil
-    for i = #headers, 1, -1 do
-        if headers[i].type == "foldable" and headers[i].line and api.nvim_buf_get_lines(buf, headers[i].line, headers[i].line + 1, false)[1]:match("^## IA") then
-            last_ia_header_index = i
-            break
-        end
-    end
-
-    for i = 1, #headers do
-        local current_header = headers[i]
-        if current_header.type ~= "api_info" then
-            local fold_start = current_header.line + 1
-            local fold_end = total_lines - 1
-
-            for j = i + 1, #headers do
-                fold_end = headers[j].line - 1
-                break
-            end
-
-            if fold_start <= fold_end then
-                vim.api.nvim_buf_call(buf, function()
-                    pcall(vim.cmd, string.format("%d,%dfold", fold_start + 1, fold_end + 1))
-                end)
-            end
-        end
-    end
-
-    for i = 1, #headers do
-        local current_header = headers[i]
-        if current_header.type == "foldable" and i ~= last_ia_header_index then
-            local fold_start = current_header.line + 1
-            local fold_end = total_lines - 1
-
-            for j = i + 1, #headers do
-                fold_end = headers[j].line - 1
-                break
-            end
-
-            if fold_start <= fold_end then
-                vim.api.nvim_buf_call(buf, function()
-                    pcall(vim.cmd, string.format("%d,%dfoldclose", fold_start + 1, fold_end + 1))
-                end)
-            end
-        end
-    end
-
-    if last_ia_header_index then
-        local last_ia_header = headers[last_ia_header_index]
-        local fold_start = last_ia_header.line + 1
-        local fold_end = total_lines - 1
-
-        for j = last_ia_header_index + 1, #headers do
-            fold_end = headers[j].line - 1
-            break
-        end
-
-        if fold_start <= fold_end then
-            vim.api.nvim_buf_call(buf, function()
-                pcall(vim.cmd, string.format("%dfoldopen!", fold_start + 1))
-            end)
-        end
-    end
-end
-
-function M.update_title()
-end
-
-return M
+cat << 'EOF' > patch_commands.awk
+/^return M/ {
+    print "vim.cmd([["
+    print "  command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)"
+    print "  command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()"
+    print "  command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()"
+    print "  command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()"
+    print "  command! -nargs=0 ContextApis lua require('multi_context').ContextApis()"
+    print "  command! -nargs=0 ContextTree lua require('multi_context').ContextTree()"
+    print "  command! -nargs=0 ContextBuffers lua require('multi_context').ContextBuffers()"
+    print "  command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()"
+    print "]])"
+    print ""
+    print "return M"
+    next
+}
+{ print }
 EOF
 
-echo "[OK] Buffer protegido com sucesso! Pode testar o <A-h> agora."
+awk -f patch_commands.awk lua/multi_context/init.lua > tmp_init.lua && mv tmp_init.lua lua/multi_context/init.lua
+rm patch_commands.awk
+
+echo "[OK] Comandos ativados! Pode testar o <A-c>."
