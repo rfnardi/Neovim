@@ -17,7 +17,10 @@ function M.create_popup(initial_content)
     M.popup_buf = buf
 
     vim.bo[buf].buftype   = 'nofile'
-    vim.bo[buf].filetype  = 'markdown'
+    
+    -- O SEU NOVO ECOSSISTEMA:
+    vim.bo[buf].filetype  = 'multicontext_chat'
+    
     vim.bo[buf].bufhidden = 'hide'
     vim.bo[buf].swapfile  = false
 
@@ -37,8 +40,6 @@ function M.create_popup(initial_content)
     local row    = math.ceil((vim.o.lines   - height) / 2)
     local col    = math.ceil((vim.o.columns - width)  / 2)
 
-    local title = " Multi_Context_Chat "
-
     local win = api.nvim_open_win(buf, true, {
         relative  = 'editor',
         width     = width,
@@ -47,7 +48,7 @@ function M.create_popup(initial_content)
         col       = col,
         style     = 'minimal',
         border    = 'rounded',
-        title     = title,
+        title     = " Multi_Context_Chat ",
         title_pos = 'center',
     })
     M.popup_win = win
@@ -56,16 +57,6 @@ function M.create_popup(initial_content)
         pattern  = tostring(win),
         once     = true,
         callback = function() M.popup_win = nil end,
-    })
-
-    api.nvim_create_autocmd("BufWipeout", {
-        buffer   = buf,
-        once     = true,
-        callback = function()
-            if vim.api.nvim_buf_is_valid(buf) then
-                vim.bo[buf].modifiable = true
-            end
-        end,
     })
 
     local user_prefix = "## " .. config.options.user_name .. " >> "
@@ -85,18 +76,14 @@ function M.create_popup(initial_content)
     api.nvim_win_set_cursor(win, { last_ln, #last_txt })
 
     hl.apply_chat(buf)
-    
-    -- Aqui os folds são aplicados de forma segura (sem referenciar o ID da janela diretamente)
     M.create_folds(buf)
 
     return buf, win
 end
 
--- Função para deixar o visual do texto ocultado bem elegante
 function M.fold_text()
     local lines_count = vim.v.foldend - vim.v.foldstart + 1
     local preview = ""
-    
     for i = vim.v.foldstart, vim.v.foldend do
         local l = vim.fn.getline(i)
         if l:match("%S") then
@@ -113,92 +100,63 @@ function M.create_folds(buf)
     local config = require('multi_context.config')
     local user_name = config.options.user_name or "User"
     
-    vim.schedule(function()
-        if not api.nvim_buf_is_valid(buf) then return end
-        
-        local windows = vim.fn.win_findbuf(buf)
-        for _, win in ipairs(windows) do
-            vim.api.nvim_win_call(win, function()
-                -- 1. Tranca as regras manualmente
-                vim.cmd("setlocal foldmethod=manual")
-                vim.cmd("setlocal foldexpr=")
-                vim.cmd("setlocal foldtext=v:lua.require('multi_context.ui.popup').fold_text()")
-                pcall(vim.cmd, 'normal! zE') -- Dizima as dobras antigas
-                
-                local total_lines = vim.api.nvim_buf_line_count(buf)
-                local headers = {}
-                
-                -- 2. MATEMÁTICA EXATA (Baseada em 1, igual a numeração do editor)
-                for lnum = 1, total_lines do
-                    local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
-                    if line and (line:match("^===") or line:match("^== Arquivo:") or 
-                       line:match("^## " .. user_name .. " >>") or line:match("^## IA")) then
-                        table.insert(headers, lnum) -- Salva a linha exata do título (ex: linha 14)
-                    end
-                end
-                
-                -- 3. Execução cirúrgica
-                for idx, h_lnum in ipairs(headers) do
-                    local header_text = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
-                    
-                    if not header_text:match("^## " .. user_name) then
-                        -- AQUI ESTÁ A MATEMÁTICA:
-                        -- Se o título é a linha 14 (h_lnum), a dobra começa na 15.
-                        local start_fold = h_lnum + 1
-                        local end_fold = total_lines
-                        
-                        if idx < #headers then
-                            end_fold = headers[idx + 1] - 1
-                        end
-                        
-                        -- Pula linhas em branco no final
-                        while end_fold >= start_fold do
-                            local l = vim.api.nvim_buf_get_lines(buf, end_fold - 1, end_fold, false)[1]
-                            if l == "" or l:match("^%s*$") then
-                                end_fold = end_fold - 1
-                            else
-                                break
-                            end
-                        end
-                        
-                        -- Se start_fold é 15 e end_fold é 40, executa: "15,40fold"
-                        -- O título na linha 14 fica intocável.
-                        if end_fold >= start_fold then
-                            pcall(vim.cmd, string.format("%d,%dfold", start_fold, end_fold))
-                            pcall(vim.cmd, string.format("%dfoldclose", start_fold))
-                        end
-                    end
-                end
-                
-                -- 4. Abre a última resposta da IA
-                for i = #headers, 1, -1 do
-                    local h_lnum = headers[i]
-                    local l = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
-                    if l and l:match("^## IA") then
-                        pcall(vim.cmd, string.format("silent! %dfoldopen!", h_lnum + 1))
-                        break
-                    end
-                end
-            end)
-        end
-        
-        -- O ESCUDO: Esse autocmd fiscaliza o buffer em tempo real.
-        -- Se o `vim-markdown` (ou você mudando de modo) tentar ativar o `foldmethod=expr` de novo,
-        -- ele é esmagado na mesma hora, protegendo a nossa matemática.
-        vim.api.nvim_create_autocmd({"CursorMoved", "ModeChanged"}, {
-            buffer = buf,
-            callback = function()
-                if vim.wo.foldmethod ~= "manual" then
-                    vim.wo.foldmethod = "manual"
-                    vim.wo.foldexpr = ""
+    local windows = vim.fn.win_findbuf(buf)
+    for _, win in ipairs(windows) do
+        vim.api.nvim_win_call(win, function()
+            vim.cmd("setlocal foldmethod=manual")
+            vim.cmd("setlocal foldexpr=")
+            vim.cmd("setlocal foldtext=v:lua.require('multi_context.ui.popup').fold_text()")
+            pcall(vim.cmd, 'normal! zE')
+            
+            local total_lines = vim.api.nvim_buf_line_count(buf)
+            local headers = {}
+            
+            for lnum = 1, total_lines do
+                local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
+                if line and (line:match("^===") or line:match("^== Arquivo:") or 
+                   line:match("^## " .. user_name .. " >>") or line:match("^## IA")) then
+                    table.insert(headers, lnum)
                 end
             end
-        })
-    end)
+            
+            for idx, h_lnum in ipairs(headers) do
+                local header_text = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
+                
+                if not header_text:match("^## " .. user_name) then
+                    local start_fold = h_lnum + 1
+                    local end_fold = total_lines
+                    
+                    if idx < #headers then
+                        end_fold = headers[idx + 1] - 1
+                    end
+                    
+                    while end_fold >= start_fold do
+                        local l = vim.api.nvim_buf_get_lines(buf, end_fold - 1, end_fold, false)[1]
+                        if l == "" or l:match("^%s*$") then
+                            end_fold = end_fold - 1
+                        else
+                            break
+                        end
+                    end
+                    
+                    if end_fold >= start_fold then
+                        pcall(vim.cmd, string.format("%d,%dfold", start_fold, end_fold))
+                        pcall(vim.cmd, string.format("%dfoldclose", start_fold))
+                    end
+                end
+            end
+            
+            for i = #headers, 1, -1 do
+                local h_lnum = headers[i]
+                local l = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
+                if l and l:match("^## IA") then
+                    pcall(vim.cmd, string.format("silent! %dfoldopen!", h_lnum + 1))
+                    break
+                end
+            end
+        end)
+    end
 end
 
-function M.update_title()
-    -- Vazio propositalmente
-end
-
+function M.update_title() end
 return M

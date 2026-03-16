@@ -19,33 +19,27 @@ M.export_to_workspace = function(content, existing_filename)
         if vim.fn.isdirectory(chat_dir) == 0 then
             vim.fn.mkdir(chat_dir, "p")
         end
-        filename = chat_dir .. "/chat_" .. timestamp .. ".md"
+        -- Usa extensão própria .mctx
+        filename = chat_dir .. "/chat_" .. timestamp .. ".mctx"
     end
     
-    -- Abre o buffer com o nome do arquivo, mas NÃO salva ainda
     vim.cmd("edit " .. filename)
     
     local new_buf = vim.api.nvim_get_current_buf()
     
-    -- Configura o buffer
-    vim.bo[new_buf].filetype = "markdown"
+    -- Define o NOSSO ecossistema
+    vim.bo[new_buf].filetype = "multicontext_chat"
     
     local lines = M.split_lines(content)
-    
-    -- Atualiza o conteúdo total do buffer
     vim.api.nvim_buf_set_lines(new_buf, 0, -1, false, lines)
-    
-    -- Sinaliza pro NeoVim que o arquivo tem alterações não salvas
     vim.bo[new_buf].modified = true
     
-    -- Cursor na última linha em modo normal
     local last_line = vim.api.nvim_buf_line_count(new_buf)
     vim.api.nvim_win_set_cursor(0, { last_line, 0 })
-    
-    -- Garante que saia de qualquer modo de inserção residual
     vim.cmd("stopinsert")
     
-    -- Replica os seus folds customizados no Workspace
+    -- Chama as cores e as dobras
+    require('multi_context.ui.highlights').apply_chat(new_buf)
     require('multi_context.ui.popup').create_folds(new_buf)
     
     return filename

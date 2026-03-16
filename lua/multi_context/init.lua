@@ -81,7 +81,7 @@ M.ToggleWorkspaceView = function()
     else
         local cur_buf = vim.api.nvim_get_current_buf()
         local name = vim.api.nvim_buf_get_name(cur_buf)
-        if name:match("multi_context_chats.*%.md$") then
+        if name:match("multi_context_chats.*%.mctx$") then
             M.current_workspace_file = name
             local lines = vim.api.nvim_buf_get_lines(cur_buf, 0, -1, false)
             local content = table.concat(lines, "\n")
