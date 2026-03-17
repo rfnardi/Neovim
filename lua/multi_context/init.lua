@@ -139,15 +139,13 @@ function M.SendFromPopup()
     local found_agent_count = 0
 
     for _, line in ipairs(lines) do
-        -- Ignora a mensagem visual de Checkpoint (para não enviar pra IA)
         if not line:match("^> %[Checkpoint%]") then
-            -- Verifica se a linha tem uma tag de agente válida
-            local possible_agent = line:match("^@(%w+)") or line:match("%s+@(%w+)")
+            -- CORREÇÃO 1: Regex agora inclui '_' para encontrar nomes como inspetor_semantico
+            local possible_agent = line:match("^@([%w_]+)") or line:match("%s+@([%w_]+)")
             if possible_agent and agents[possible_agent] then
                 found_agent_count = found_agent_count + 1
             end
             
-            -- O primeiro agente e seu texto vão para a tarefa atual. O resto vai pra fila.
             if found_agent_count <= 1 then
                 table.insert(current_task_lines, line)
             else
@@ -168,42 +166,28 @@ function M.SendFromPopup()
     local active_agent_prompt = ""
     local text_to_send = current_user_text
 
-    -- Extrai o agente da tarefa atual
-    local agent_match = current_user_text:match("@(%w+)")
+    -- CORREÇÃO 1 (Continuação)
+    local agent_match = current_user_text:match("@([%w_]+)")
     if agent_match and agents[agent_match] then
         active_agent_name = agent_match
-        active_agent_prompt = "=== INSTRUÇÕES DO AGENTE: " .. string.upper(agent_match) .. " ===\n" .. agents[agent_match].system_prompt
-        -- Limpa a tag da mensagem que vai para a API
+        active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(agent_match) .. " ===\n" .. agents[agent_match].system_prompt
         text_to_send = current_user_text:gsub("@" .. agent_match .. "%s*", "")
     end
 
     local sending_msg = "[Enviando requisição" .. (active_agent_name and (" via @" .. active_agent_name) or "") .. "...]"
     api.nvim_buf_set_lines(buf, -1, -1, false, { "", sending_msg })
 
-    -- ==========================================
-    -- MONTAGEM DO CONTEXTO (Histórico + Prompt)
-    -- ==========================================
+    -- CORREÇÃO 2: Pega o contexto inteiro diretamente. Sem processamento letal byte-por-byte.
+    local all_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+    local full_context = table.concat(all_lines, "\n")
     
-    -- Pega tudo que estava ANTES do "## Nardi >>" atual (arquivos de contexto e histórico do chat)
-    local history_lines = api.nvim_buf_get_lines(buf, 0, start_idx, false)
-    local history_text = table.concat(history_lines, "\n")
-    
-    -- SYSTEM PROMPT: Recebe apenas a regra do Agente e a base
-    local system_prompt = "Você é um Engenheiro de Software Autônomo operando dentro do Neovim. Você tem acesso ao código do projeto no histórico do chat e pode interagir com o sistema do usuário."
     if active_agent_prompt ~= "" then
-        system_prompt = system_prompt .. "\n\n" .. active_agent_prompt
+        full_context = full_context .. active_agent_prompt
     end
-    
-    -- USER PROMPT: Recebe os arquivos de contexto + O seu pedido atual
-    local full_user_content = ""
-    if history_text ~= "" then
-        full_user_content = history_text .. "\n\n"
-    end
-    full_user_content = full_user_content .. user_prefix .. " " .. text_to_send
     
     local messages = {
-        { role = "system", content = system_prompt },
-        { role = "user", content = full_user_content }
+        { role = "system", content = full_context },
+        { role = "user", content = text_to_send }
     }
 
     local api_client = require('multi_context.api_client')
@@ -248,10 +232,8 @@ function M.SendFromPopup()
         function(api_entry)
             if not response_started then remove_sending_msg() end
             
-            -- Monta o prompt da próxima interação
             local next_prompt_lines = { "", "## API atual: " .. api_entry.name, user_prefix .. " " }
             
-            -- Se sobrou alguma tarefa na fila, preenche o buffer automaticamente para o usuário
             if queued_user_text ~= "" then
                 table.insert(next_prompt_lines, "> [Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
                 local queued_split = vim.split(queued_user_text, "\n")
@@ -263,11 +245,10 @@ function M.SendFromPopup()
             api.nvim_buf_set_lines(buf, -1, -1, false, next_prompt_lines)
             
             require('multi_context.ui.highlights').apply_chat(buf)
-            popup.create_folds(buf)
+            require('multi_context.ui.popup').create_folds(buf)
             
             if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
                 local count = api.nvim_buf_line_count(buf)
-                -- Coloca o cursor no final, pronto para o próximo Enter
                 api.nvim_win_set_cursor(popup.popup_win, { count, #next_prompt_lines[#next_prompt_lines] })
                 vim.cmd("normal! zz")
                 vim.cmd("startinsert!")

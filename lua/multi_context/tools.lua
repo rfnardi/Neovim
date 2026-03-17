@@ -36,6 +36,9 @@ M.edit_file = function(path, content)
         vim.fn.mkdir(dir, "p")
     end
 
+    content = content:gsub("^\n", "")
+    content = content:gsub("\n$", "")
+
     local lines = vim.split(content, "\n", {plain=true})
     vim.fn.writefile(lines, full_path)
     return "SUCESSO: Arquivo " .. path .. " foi salvo/atualizado."
