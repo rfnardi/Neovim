@@ -15,22 +15,21 @@ function M.create_popup(initial_content_or_bufnr)
     
     local buf
     
-    -- Se o argumento for um número, é um buffer existente (vindo do Workspace)
     if type(initial_content_or_bufnr) == "number" and api.nvim_buf_is_valid(initial_content_or_bufnr) then
         buf = initial_content_or_bufnr
     else
         buf = api.nvim_create_buf(false, true)
+        
+        -- >>> DE VOLTA À PAZ: O Coc ignora buffers nofile, o que mata os menus fantasmas! <<<
         vim.bo[buf].buftype   = 'nofile'
         vim.bo[buf].bufhidden = 'hide'
         vim.bo[buf].swapfile  = false
         
-        -- Injeta conteúdo apenas se for um buffer novo
         local user_prefix = "## " .. config.options.user_name .. " >> "
         if type(initial_content_or_bufnr) == "string" and initial_content_or_bufnr ~= "" then
             local init_lines = vim.split(initial_content_or_bufnr, "\n", { plain = true })
             api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
             
-            -- Procura se a última linha não vazia já é um prompt
             local has_prompt = false
             for i = #init_lines, 1, -1 do
                 if init_lines[i] ~= "" then
@@ -58,10 +57,15 @@ function M.create_popup(initial_content_or_bufnr)
     api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
     api.nvim_buf_set_keymap(buf, "i", "<S-CR>", "<Esc><Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
     api.nvim_buf_set_keymap(buf, "n", "<S-CR>", "<Cmd>lua require('multi_context').SendFromPopup()<CR>", km)
+    
+    -- O nosso atalho perfeito do menu de Agentes:
+    api.nvim_buf_set_keymap(buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
 
     api.nvim_buf_set_keymap(buf, "n", "<A-b>", "<Cmd>lua require('multi_context.utils').copy_code_block()<CR>", km)
     api.nvim_buf_set_keymap(buf, "i", "<A-b>", "<Esc><Cmd>lua require('multi_context.utils').copy_code_block()<CR>a", km)
     api.nvim_buf_set_keymap(buf, "n", "q", "<Cmd>q<CR>", km)
+
+    api.nvim_buf_set_keymap(buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
 
     local width  = math.ceil(vim.o.columns * 0.8)
     local height = math.ceil(vim.o.lines   * 0.8)

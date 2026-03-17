@@ -42,6 +42,10 @@ M.export_to_workspace = function(content, existing_filename)
     require('multi_context.ui.highlights').apply_chat(new_buf)
     require('multi_context.ui.popup').create_folds(new_buf)
     
+    -- Adiciona o atalho do Agente no Workspace também
+    local km = { noremap = true, silent = true }
+    vim.api.nvim_buf_set_keymap(new_buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
+    
     return filename
 end
 

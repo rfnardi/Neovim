@@ -125,18 +125,36 @@ function M.SendFromPopup()
     local lines = api.nvim_buf_get_lines(buf, start_idx, -1, false)
     local config = require('multi_context.config')
     local user_prefix = "## " .. (config.options.user_name or "Nardi") .. " >>"
-    local user_text = table.concat(lines, "\n"):gsub("^" .. user_prefix .. "%s*", "")
+    local raw_user_text = table.concat(lines, "\n"):gsub("^" .. user_prefix .. "%s*", "")
     
-    if user_text == "" then
+    if raw_user_text == "" then
         vim.notify("Digite algo antes de enviar.", vim.log.levels.WARN)
         return
     end
 
-    -- Avisa visualmente que está processando
-    api.nvim_buf_set_lines(buf, -1, -1, false, { "", "[Enviando requisição para IA...]" })
+    -- ==========================================
+    -- LÓGICA DE AGENTES: Intercepta o @agente
+    -- ==========================================
+    local agents = require('multi_context.agents').load_agents()
+    local active_agent_name = nil
+    local active_agent_prompt = ""
+    local user_text = raw_user_text
 
-    -- Função de limpeza de caracteres especiais
+    -- Verifica se o texto começa com @nome_do_agente
+    local agent_match = raw_user_text:match("^@(%w+)")
+    if agent_match and agents[agent_match] then
+        active_agent_name = agent_match
+        active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(agent_match) .. " ===\n" .. agents[agent_match].system_prompt
+        -- Remove o "@agente " do texto que será enviado como pergunta do usuário
+        user_text = raw_user_text:gsub("^@" .. agent_match .. "%s*", "")
+    end
+
+    -- Avisa visualmente que está processando
+    local sending_msg = "[Enviando requisição" .. (active_agent_name and (" via @" .. active_agent_name) or "") .. "...]"
+    api.nvim_buf_set_lines(buf, -1, -1, false, { "", sending_msg })
+
     local function clean_text(text)
+        -- (Sua função clean_text original continua aqui igual...)
         if not text then return "" end
         local result = {}
         for i = 1, #text do
@@ -147,7 +165,7 @@ function M.SendFromPopup()
             elseif byte == 195 then 
                 local next_byte = text:sub(i+1, i+1):byte()
                 local mapping = {
-                    [128]="A", [129]="A", [130]="A", [131]="A", [132]="A", [133]="A", [134]="A", [135]="C", [136]="E", [137]="E", [138]="E", [139]="E", [140]="I", [141]="I", [142]="I", [143]="I", [144]="D", [145]="N", [146]="O", [147]="O", [148]="O", [149]="O", [150]="O", [151]="O", [152]="U", [153]="U", [154]="U", [155]="U", [160]="a", [161]="a", [162]="a", [163]="a", [164]="a", [165]="a", [166]="a", [167]="c", [168]="e", [169]="e", [170]="e", [171]="e", [172]="i", [173]="i", [174]="i", [175]="i", [176]="d", [177]="n", [178]="o", [179]="o", [180]="o", [181]="o", [182]="o", [183]="o", [184]="u", [185]="u", [186]="u", [187]="u"
+                    [128]="A", [129]="A", [130]="A", [131]="A", [132]="A",[133]="A", [134]="A", [135]="C",[136]="E", [137]="E", [138]="E", [139]="E", [140]="I", [141]="I", [142]="I",[143]="I", [144]="D", [145]="N", [146]="O", [147]="O", [148]="O", [149]="O",[150]="O", [151]="O", [152]="U", [153]="U", [154]="U", [155]="U", [160]="a",[161]="a", [162]="a", [163]="a",[164]="a", [165]="a", [166]="a", [167]="c", [168]="e", [169]="e", [170]="e",[171]="e", [172]="i", [173]="i", [174]="i", [175]="i", [176]="d", [177]="n",[178]="o", [179]="o", [180]="o", [181]="o", [182]="o", [183]="o", [184]="u",[185]="u", [186]="u", [187]="u"
                 }
                 if mapping[next_byte] then table.insert(result, mapping[next_byte]) end
                 i = i + 1 
@@ -156,9 +174,13 @@ function M.SendFromPopup()
         return table.concat(result)
     end
 
-    -- Pega todo o texto do buffer sem precisar de função externa
     local all_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
     local full_context = clean_text(table.concat(all_lines, "\n"))
+    
+    -- Injeta as regras do agente no final do contexto geral para dar maior peso
+    if active_agent_prompt ~= "" then
+        full_context = full_context .. active_agent_prompt
+    end
     
     local messages = {
         { role = "system", content = full_context },
@@ -183,7 +205,12 @@ function M.SendFromPopup()
         function(chunk, api_entry)
             if not response_started then
                 remove_sending_msg()
-                api.nvim_buf_set_lines(buf, -1, -1, false, { "", "## IA (" .. api_entry.model .. ") >> ", "" })
+								local ia_title = "## IA (" .. api_entry.model .. ")"
+                if active_agent_name then
+                    ia_title = ia_title .. "[@" .. active_agent_name .. "]"
+                end
+                ia_title = ia_title .. " >> "
+                api.nvim_buf_set_lines(buf, -1, -1, false, { "", ia_title, "" })
                 response_started = true
             end
             
