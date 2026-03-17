@@ -45,7 +45,10 @@ M.export_to_workspace = function(content, existing_filename)
     -- Adiciona o atalho do Agente no Workspace também
     local km = { noremap = true, silent = true }
     vim.api.nvim_buf_set_keymap(new_buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
-    
+		-- comando para chamar a execução no Workspace
+    vim.api.nvim_buf_set_keymap(new_buf, "n", "<A-x>", "<Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
+    vim.api.nvim_buf_set_keymap(new_buf, "i", "<A-x>", "<Esc><Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
+
     return filename
 end
 

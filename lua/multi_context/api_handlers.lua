@@ -59,8 +59,13 @@ M.gemini = {
         end
 
         local contents = {}
+        local system_instruction = nil
+
         for _, msg in ipairs(messages) do
-            if msg.role ~= "system" then
+            if msg.role == "system" then
+                -- Salva o system prompt no formato oficial do Gemini
+                system_instruction = { parts = { { text = msg.content } } }
+            else
                 table.insert(contents, {
                     role  = (msg.role == "user") and "user" or "model",
                     parts = { { text = msg.content } },
@@ -69,6 +74,10 @@ M.gemini = {
         end
 
         local payload = { contents = contents }
+        if system_instruction then
+            payload.systemInstruction = system_instruction
+        end
+        
         local url = api_config.url:gsub(":generateContent", ":streamGenerateContent")
         
         local cmd = {

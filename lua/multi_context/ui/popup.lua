@@ -67,6 +67,9 @@ function M.create_popup(initial_content_or_bufnr)
 
     api.nvim_buf_set_keymap(buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
 
+		api.nvim_buf_set_keymap(buf, "n", "<A-x>", "<Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "i", "<A-x>", "<Esc><Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
+
     local width  = math.ceil(vim.o.columns * 0.8)
     local height = math.ceil(vim.o.lines   * 0.8)
     local row    = math.ceil((vim.o.lines   - height) / 2)
