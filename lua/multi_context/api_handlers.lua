@@ -1,7 +1,5 @@
 local M = {}
 
-local M = {}
-
 local function decode_json_string(s)
     -- Fallback manual (agora suporta unicode também)
     s = s:gsub("\\n",  "\n")
