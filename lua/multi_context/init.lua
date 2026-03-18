@@ -272,15 +272,40 @@ function M.ExecuteTools()
     end
 
     local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
-    local content = table.concat(lines, "\n")
-    local has_changes = false
     
-    -- Variáveis de estado para o menu iterativo
+    -- BLINDAGEM DE ESCOPO: Encontra a ÚLTIMA resposta da IA.
+    -- Isso garante que não vamos executar tags coladas acidentalmente 
+    -- no prompt do usuário (como exemplos em código-fonte).
+    local last_ia_idx = 0
+    for i = #lines, 1, -1 do
+        if lines[i]:match("^## IA") then
+            last_ia_idx = i
+            break
+        end
+    end
+    
+    if last_ia_idx == 0 then
+        vim.notify("Nenhuma resposta da IA encontrada para executar ferramentas.", vim.log.levels.WARN)
+        return
+    end
+
+    -- Separa o conteúdo do usuário (intocável) e o conteúdo da IA (a ser processado)
+    local prefix_lines = {}
+    for i = 1, last_ia_idx - 1 do
+        table.insert(prefix_lines, lines[i])
+    end
+    
+    local process_lines = {}
+    for i = last_ia_idx, #lines do
+        table.insert(process_lines, lines[i])
+    end
+    
+    local content_to_process = table.concat(process_lines, "\n")
+    local has_changes = false
     local approve_all = false
     local abort_all = false
 
-    local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
-        -- Se o usuário apertar "Cancelar", ignora os próximos blocos intactos
+    local new_content = content_to_process:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
         if abort_all then
             return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
         end
@@ -288,7 +313,6 @@ function M.ExecuteTools()
         local tools = require('multi_context.tools')
         local result = ""
         
-        -- Parser híbrido (XML/JSON)
         local name = attrs:match('name="([^"]+)"')
         local path = attrs:match('path="([^"]+)"')
         local payload = inner
@@ -305,14 +329,16 @@ function M.ExecuteTools()
         end
         if path then path = vim.trim(path) end
         
-        -- MENU DE APROVAÇÃO INTERATIVA
+        -- BLINDAGEM DE ATRIBUTOS: Reconstrói a tag do zero para evitar nomes duplicados
+        local clean_attrs = string.format(' name="%s"', tostring(name))
+        if path and path ~= "" then
+            clean_attrs = clean_attrs .. string.format(' path="%s"', path)
+        end
+
         local choice = 1
         if not approve_all then
-            -- Destaca visualmente a ferramenta e o alvo
             local target = path and ("\nAlvo: " .. path) or ""
             local msg = string.format("Permitir execução de [%s]?%s", tostring(name), target)
-            
-            -- Opções: 1(Sim) | 2(Não) | 3(Todos) | 4(Cancelar)
             choice = vim.fn.confirm(msg, "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
         end
 
@@ -326,30 +352,35 @@ function M.ExecuteTools()
 
         has_changes = true
 
-        -- SE O USUÁRIO NEGAR A EXECUÇÃO:
         if choice == 2 then
+            -- Usa o clean_attrs limpo, sem herdar a duplicação
             return string.format(
-                '<tool_rejected name="%s"%s>\n%s\n</tool_rejected>\n\n>[Sistema]: Acesso NEGADO pelo usuario. A ferramenta não foi executada.',
-                tostring(name), attrs, inner
+                '<tool_rejected%s>\n%s\n</tool_rejected>\n\n>[Sistema]: Acesso NEGADO pelo usuario. A ferramenta não foi executada.',
+                clean_attrs, inner
             )
         end
 
-        -- SE O USUÁRIO APROVAR:
         if name == "list_files" then result = tools.list_files()
         elseif name == "read_file" then result = tools.read_file(path)
         elseif name == "edit_file" then result = tools.edit_file(path, payload)
         elseif name == "run_shell" then result = tools.run_shell(payload)
-        else result = "Erro: Ferramenta[" .. tostring(name) .. "] desconhecida ou mal formatada." end
+        else result = "Erro: Ferramenta [" .. tostring(name) .. "] desconhecida ou mal formatada." end
         
         return string.format(
-            '<tool_executed name="%s"%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
-            tostring(name), attrs, inner, result
+            '<tool_executed%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
+            clean_attrs, inner, result
         )
     end)
 
     if has_changes then
-        local new_lines = vim.split(new_content, "\n", {plain=true})
-        api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
+        local new_process_lines = vim.split(new_content, "\n", {plain=true})
+        
+        -- Junta a parte de cima intacta com a parte processada da IA
+        local final_lines = {}
+        for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
+        for _, l in ipairs(new_process_lines) do table.insert(final_lines, l) end
+        
+        api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
         
         if abort_all then
             vim.notify("Execução em lote cancelada.", vim.log.levels.WARN)
@@ -361,7 +392,7 @@ function M.ExecuteTools()
         require('multi_context.ui.highlights').apply_chat(buf)
         require('multi_context.ui.popup').create_folds(buf)
     else
-        vim.notify("Nenhuma <tool_call> pendente encontrada na tela.", vim.log.levels.WARN)
+        vim.notify("Nenhuma <tool_call> pendente encontrada na última resposta da IA.", vim.log.levels.WARN)
     end
 end
 

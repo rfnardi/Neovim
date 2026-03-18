@@ -68,10 +68,10 @@
         "Authorization": "Bearer {API_KEY}"
       },
       "api_type": "openai",
-      "name": "open_router_deep_seek",
-      "model": "deepseek/deepseek-r1-0528:free",
+      "name": "deepseek",
+      "model": "deepseek-chat",
       "num_tries": 2,
-      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "url": "https://api.deepseek.com/chat/completions",
       "include_in_fall-back_mode": true
     },
     {
