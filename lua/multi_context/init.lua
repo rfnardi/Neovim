@@ -152,10 +152,18 @@ function M.SendFromPopup()
     local active_agent_prompt = ""
     local text_to_send = current_user_text
 
-    local agent_match = current_user_text:match("@([%w_]+)")
+		local agent_match = current_user_text:match("@([%w_]+)")
     if agent_match and agents[agent_match] then
         active_agent_name = agent_match
         active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(agent_match) .. " ===\n" .. agents[agent_match].system_prompt
+        
+        -- INJEÇÃO DINÂMICA DE FERRAMENTAS
+        -- Se o JSON disser que o agente usa ferramentas, anexa o manual completo!
+        if agents[agent_match].use_tools then
+            local tools_manual = require('multi_context.agents').get_tools_manual()
+            active_agent_prompt = active_agent_prompt .. "\n\n" .. tools_manual
+        end
+        
         text_to_send = current_user_text:gsub("@" .. agent_match .. "%s*", "")
     end
 
@@ -252,7 +260,7 @@ function M.SendFromPopup()
 end
 
 -- ======================================================
--- Executor de Ferramentas (Aprovação Manual)
+-- Executor de Ferramentas (Aprovação Manual e Seletiva)
 -- ======================================================
 function M.ExecuteTools()
     local p = require('multi_context.ui.popup')
@@ -266,35 +274,90 @@ function M.ExecuteTools()
     local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
     local content = table.concat(lines, "\n")
     local has_changes = false
+    
+    -- Variáveis de estado para o menu iterativo
+    local approve_all = false
+    local abort_all = false
 
-    local new_content = content:gsub('<tool_call name="(.-)"(.-)>(.-)</tool_call>', function(name, args, inner)
-        has_changes = true
+    local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
+        -- Se o usuário apertar "Cancelar", ignora os próximos blocos intactos
+        if abort_all then
+            return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
+        end
+
         local tools = require('multi_context.tools')
         local result = ""
         
-        local path = args:match('path="(.-)"')
+        -- Parser híbrido (XML/JSON)
+        local name = attrs:match('name="([^"]+)"')
+        local path = attrs:match('path="([^"]+)"')
+        local payload = inner
+        
+        if not name or name == "" then
+            local ok, json = pcall(vim.fn.json_decode, vim.trim(inner))
+            if ok and type(json) == "table" then
+                name = json.name
+                if type(json.arguments) == "table" then
+                    path = json.arguments.path
+                    payload = json.arguments.command or json.arguments.content or json.arguments.code or ""
+                end
+            end
+        end
         if path then path = vim.trim(path) end
         
+        -- MENU DE APROVAÇÃO INTERATIVA
+        local choice = 1
+        if not approve_all then
+            -- Destaca visualmente a ferramenta e o alvo
+            local target = path and ("\nAlvo: " .. path) or ""
+            local msg = string.format("Permitir execução de [%s]?%s", tostring(name), target)
+            
+            -- Opções: 1(Sim) | 2(Não) | 3(Todos) | 4(Cancelar)
+            choice = vim.fn.confirm(msg, "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
+        end
+
+        if choice == 3 then
+            approve_all = true
+            choice = 1
+        elseif choice == 4 or choice == 0 then
+            abort_all = true
+            return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
+        end
+
+        has_changes = true
+
+        -- SE O USUÁRIO NEGAR A EXECUÇÃO:
+        if choice == 2 then
+            return string.format(
+                '<tool_rejected name="%s"%s>\n%s\n</tool_rejected>\n\n>[Sistema]: Acesso NEGADO pelo usuario. A ferramenta não foi executada.',
+                tostring(name), attrs, inner
+            )
+        end
+
+        -- SE O USUÁRIO APROVAR:
         if name == "list_files" then result = tools.list_files()
         elseif name == "read_file" then result = tools.read_file(path)
-        elseif name == "edit_file" then result = tools.edit_file(path, inner)
-        elseif name == "run_shell" then result = tools.run_shell(inner)
-        else result = "Erro: Ferramenta [" .. name .. "] desconhecida." end
+        elseif name == "edit_file" then result = tools.edit_file(path, payload)
+        elseif name == "run_shell" then result = tools.run_shell(payload)
+        else result = "Erro: Ferramenta[" .. tostring(name) .. "] desconhecida ou mal formatada." end
         
         return string.format(
             '<tool_executed name="%s"%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
-            name, args, inner, result
+            tostring(name), attrs, inner, result
         )
     end)
 
     if has_changes then
         local new_lines = vim.split(new_content, "\n", {plain=true})
         api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
-        vim.notify("Ferramentas executadas com sucesso!", vim.log.levels.INFO)
         
-        -- Sincroniza o Neovim com o disco
+        if abort_all then
+            vim.notify("Execução em lote cancelada.", vim.log.levels.WARN)
+        else
+            vim.notify("Ferramentas processadas!", vim.log.levels.INFO)
+        end
+        
         vim.cmd("silent! checktime")
-        
         require('multi_context.ui.highlights').apply_chat(buf)
         require('multi_context.ui.popup').create_folds(buf)
     else
