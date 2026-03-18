@@ -13,14 +13,12 @@ M.history = {}
 M.context_text = nil
 M.current_workspace_file = nil
 
--- === 1. A FUNÇÃO SETUP QUE FALTAVA ===
 M.setup = function(opts)
     if config and config.setup then
         config.setup(opts)
     end
 end
 
--- Expor funções públicas
 M.ContextChatFull = commands.ContextChatFull
 M.ContextChatSelection = commands.ContextChatSelection
 M.ContextChatFolder = commands.ContextChatFolder
@@ -31,7 +29,6 @@ M.ContextApis = commands.ContextApis
 M.ContextTree = commands.ContextTree
 M.ContextBuffers = commands.ContextBuffers
 
--- === 2. LÓGICA DO TOGGLE (<A-h>) À PROVA DE BALAS ===
 M.TogglePopup = function()
     local p = require('multi_context.ui.popup')
     
@@ -68,26 +65,20 @@ M.TogglePopup = function()
 end
 commands.TogglePopup = M.TogglePopup
 
--- === 3. LÓGICA DO WORKSPACE (<A-w>) QUE FALTAVA ===
 M.ToggleWorkspaceView = function()
     local ui_popup = require('multi_context.ui.popup')
     local is_popup = (ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) and vim.api.nvim_get_current_win() == ui_popup.popup_win)
 
     if is_popup then
-        -- Se estiver no popup, pega o conteúdo, fecha o popup e abre o arquivo .mctx em tela cheia
         local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
         local content = table.concat(lines, "\n")
         vim.api.nvim_win_hide(ui_popup.popup_win)
         M.current_workspace_file = utils.export_to_workspace(content, M.current_workspace_file)
     else
-        -- Se estiver em tela cheia (workspace), não copia o texto.
-        -- Apenas manda o popup FLUTUAR SOBRE o buffer atual do .mctx!
         local cur_buf = vim.api.nvim_get_current_buf()
         local name = vim.api.nvim_buf_get_name(cur_buf)
         if name:match("multi_context_chats.*%.mctx$") then
             M.current_workspace_file = name
-            
-            -- Passa o ID numérico do buffer para reutilizar o buffer vivo!
             ui_popup.create_popup(cur_buf)
         else
             vim.notify("Você não está em um arquivo de workspace (.mctx).", vim.log.levels.WARN)
@@ -97,7 +88,6 @@ end
 
 local original_open_popup = popup.create_popup
 popup.create_popup = function(initial_content)
-    -- Agora o retorno (buf, win) é capturado e repassado corretamente
     local b, w = original_open_popup(initial_content)
     M.popup_buf = popup.popup_buf
     M.popup_win = popup.popup_win
@@ -131,16 +121,12 @@ function M.SendFromPopup()
 
     local agents = require('multi_context.agents').load_agents()
     
-    -- ==========================================
-    -- PARSER DA FILA DE AGENTES (PIPELINE)
-    -- ==========================================
     local current_task_lines = {}
     local queued_tasks_lines = {}
     local found_agent_count = 0
 
     for _, line in ipairs(lines) do
         if not line:match("^> %[Checkpoint%]") then
-            -- CORREÇÃO 1: Regex agora inclui '_' para encontrar nomes como inspetor_semantico
             local possible_agent = line:match("^@([%w_]+)") or line:match("%s+@([%w_]+)")
             if possible_agent and agents[possible_agent] then
                 found_agent_count = found_agent_count + 1
@@ -166,7 +152,6 @@ function M.SendFromPopup()
     local active_agent_prompt = ""
     local text_to_send = current_user_text
 
-    -- CORREÇÃO 1 (Continuação)
     local agent_match = current_user_text:match("@([%w_]+)")
     if agent_match and agents[agent_match] then
         active_agent_name = agent_match
@@ -177,7 +162,6 @@ function M.SendFromPopup()
     local sending_msg = "[Enviando requisição" .. (active_agent_name and (" via @" .. active_agent_name) or "") .. "...]"
     api.nvim_buf_set_lines(buf, -1, -1, false, { "", sending_msg })
 
-    -- CORREÇÃO 2: Pega o contexto inteiro diretamente. Sem processamento letal byte-por-byte.
     local all_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
     local full_context = table.concat(all_lines, "\n")
     
@@ -274,7 +258,6 @@ function M.ExecuteTools()
     local p = require('multi_context.ui.popup')
     local buf = p.popup_buf
     
-    -- Detecta se o atalho foi chamado do Popup ou do Workspace
     if not buf or not api.nvim_buf_is_valid(buf) then
         buf = api.nvim_get_current_buf()
         if vim.bo[buf].filetype ~= "multicontext_chat" then return end
@@ -284,13 +267,11 @@ function M.ExecuteTools()
     local content = table.concat(lines, "\n")
     local has_changes = false
 
-    -- Faz o parse de qualquer bloco <tool_call> na tela
     local new_content = content:gsub('<tool_call name="(.-)"(.-)>(.-)</tool_call>', function(name, args, inner)
         has_changes = true
         local tools = require('multi_context.tools')
         local result = ""
         
-        -- Extrai o parâmetro path="x" se existir
         local path = args:match('path="(.-)"')
         if path then path = vim.trim(path) end
         
@@ -300,7 +281,6 @@ function M.ExecuteTools()
         elseif name == "run_shell" then result = tools.run_shell(inner)
         else result = "Erro: Ferramenta [" .. name .. "] desconhecida." end
         
-        -- Transforma a tag em "executed" e anexa a saída do comando!
         return string.format(
             '<tool_executed name="%s"%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
             name, args, inner, result
@@ -311,7 +291,10 @@ function M.ExecuteTools()
         local new_lines = vim.split(new_content, "\n", {plain=true})
         api.nvim_buf_set_lines(buf, 0, -1, false, new_lines)
         vim.notify("Ferramentas executadas com sucesso!", vim.log.levels.INFO)
-        -- Atualiza os folds e os highlights (o resultado ficará colorido)
+        
+        -- Sincroniza o Neovim com o disco
+        vim.cmd("silent! checktime")
+        
         require('multi_context.ui.highlights').apply_chat(buf)
         require('multi_context.ui.popup').create_folds(buf)
     else
@@ -319,7 +302,6 @@ function M.ExecuteTools()
     end
 end
 
--- Exporta a função
 M.ExecuteTools = M.ExecuteTools
 
 vim.cmd([[

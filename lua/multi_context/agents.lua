@@ -25,7 +25,49 @@ M.get_agent_names = function()
     return names
 end
 
--- Variáveis de controle da interface
+-- =======================================================
+-- MANUAL GLOBAL DE FERRAMENTAS
+-- =======================================================
+M.get_tools_manual = function()
+    return [[
+
+=== FERRAMENTAS DO SISTEMA (SYSTEM TOOLS) ===
+
+Você é um Agente Autônomo rodando nativamente dentro do editor Neovim do usuário. Você tem a capacidade de interagir com o sistema de arquivos local e com o terminal (bash) do projeto atual.
+
+REGRA ABSOLUTA DE FORMATO:
+Para invocar uma ferramenta, você DEVE usar ESTRITAMENTE o formato de tags XML exemplificado abaixo.
+É ESTRITAMENTE PROIBIDO usar formato JSON, Markdown Code Blocks (```xml) engolindo a tag, ou qualquer outra variação. A tag XML crua deve estar livre no meio do seu texto.
+
+Ferramentas Disponíveis:
+
+1. Listar Arquivos (list_files)
+Retorna a árvore de todos os arquivos rastreados pelo Git no repositório.
+Formato OBRIGATÓRIO:
+<tool_call name="list_files"></tool_call>
+
+2. Ler Arquivo (read_file)
+Lê e retorna o conteúdo exato de um arquivo do repositório.
+Formato OBRIGATÓRIO:
+<tool_call name="read_file" path="caminho/do/arquivo.ext"></tool_call>
+
+3. Editar/Criar Arquivo (edit_file)
+Cria um novo arquivo ou sobrescreve um arquivo existente. O texto dentro da tag deve ser estritamente o CÓDIGO FONTE COMPLETO em texto puro (raw text). Não use formatação markdown dentro da tag.
+Formato OBRIGATÓRIO:
+<tool_call name="edit_file" path="caminho/do/arquivo.ext">
+// SEU CÓDIGO COMPLETO AQUI
+</tool_call>
+
+4. Executar Terminal (run_shell)
+Roda comandos no terminal do sistema (ambiente Bash) na raiz do repositório. O comando deve ser passado em texto puro.
+Formato OBRIGATÓRIO:
+<tool_call name="run_shell">
+comando bash aqui
+</tool_call>
+]]
+end
+
+-- Variáveis de controle da interface flutuante
 M.selector_buf = nil
 M.selector_win = nil
 M.current_selection = 1
@@ -36,7 +78,6 @@ M.open_agent_selector = function()
     M.api_list = M.get_agent_names()
     if #M.api_list == 0 then
         vim.notify("Nenhum agente encontrado no JSON.", vim.log.levels.WARN)
-        -- Se não tiver agente, apenas volta a digitar normalmente
         api.nvim_feedkeys("a", "n", true)
         return
     end
@@ -48,7 +89,6 @@ M.open_agent_selector = function()
     local width = 30
     local height = #M.api_list
 
-    -- Abre uma janela flutuante ancorada exatamente no cursor do mouse
     M.selector_win = api.nvim_open_win(M.selector_buf, true, {
         relative = "cursor",
         row = 1,
@@ -76,7 +116,6 @@ M._render = function()
     vim.bo[M.selector_buf].modifiable = true
     api.nvim_buf_set_lines(M.selector_buf, 0, -1, false, lines)
     
-    -- Colore a linha selecionada (Aproveita a cor do seu próprio highlight de API)
     local ns = api.nvim_create_namespace("mc_agents")
     api.nvim_buf_clear_namespace(M.selector_buf, ns, 0, -1)
     api.nvim_buf_add_highlight(M.selector_buf, ns, "ContextSelectorCurrent", M.current_selection - 1, 0, -1)
@@ -106,21 +145,15 @@ M._select = function()
     local name = M.api_list[M.current_selection]
     M._close_win_only()
     
-    -- Volta para o chat, insere o nome do agente e te deixa continuar digitando
     if M.parent_win and api.nvim_win_is_valid(M.parent_win) then
         api.nvim_set_current_win(M.parent_win)
         
         local row, col = unpack(api.nvim_win_get_cursor(0))
         local line = api.nvim_get_current_line()
         
-        -- Adiciona o nome do agente logo após o '@'
         local new_line = string.sub(line, 1, col + 1) .. name .. string.sub(line, col + 2)
         api.nvim_set_current_line(new_line)
-        
-        -- Move o cursor pro final da palavra inserida
         api.nvim_win_set_cursor(0, {row, col + 1 + #name})
-        
-        -- Aciona o 'a' (append) para você continuar digitando perfeitamente
         api.nvim_feedkeys("a", "n", true)
     end
 end
