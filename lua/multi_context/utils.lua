@@ -15,10 +15,16 @@ M.export_to_workspace = function(content, existing_filename)
     local filename = existing_filename
     if not filename then
         local timestamp = os.date("%Y%m%d_%H%M%S")
-        local chat_dir = vim.fn.expand("~/.config/nvim/multi_context_chats")
+        
+        -- NOVO COMPORTAMENTO: Salva os chats no diretório atual do projeto
+        local cwd = vim.fn.getcwd()
+        local chat_dir = cwd .. "/.mctx_chats"
+        
+        -- Cria a pasta oculta .mctx_chats na raiz do projeto, se não existir
         if vim.fn.isdirectory(chat_dir) == 0 then
             vim.fn.mkdir(chat_dir, "p")
         end
+        
         -- Usa extensão própria .mctx
         filename = chat_dir .. "/chat_" .. timestamp .. ".mctx"
     end
@@ -42,10 +48,9 @@ M.export_to_workspace = function(content, existing_filename)
     require('multi_context.ui.highlights').apply_chat(new_buf)
     require('multi_context.ui.popup').create_folds(new_buf)
     
-    -- Adiciona o atalho do Agente no Workspace também
+    -- Adiciona os atalhos no Workspace
     local km = { noremap = true, silent = true }
     vim.api.nvim_buf_set_keymap(new_buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
-		-- comando para chamar a execução no Workspace
     vim.api.nvim_buf_set_keymap(new_buf, "n", "<A-x>", "<Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
     vim.api.nvim_buf_set_keymap(new_buf, "i", "<A-x>", "<Esc><Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
 
