@@ -20,7 +20,6 @@ function M.create_popup(initial_content_or_bufnr)
     else
         buf = api.nvim_create_buf(false, true)
         
-        -- >>> DE VOLTA À PAZ: O Coc ignora buffers nofile, o que mata os menus fantasmas! <<<
         vim.bo[buf].buftype   = 'nofile'
         vim.bo[buf].bufhidden = 'hide'
         vim.bo[buf].swapfile  = false
@@ -63,7 +62,7 @@ function M.create_popup(initial_content_or_bufnr)
 
     api.nvim_buf_set_keymap(buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
 
-		api.nvim_buf_set_keymap(buf, "n", "<A-x>", "<Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
+    api.nvim_buf_set_keymap(buf, "n", "<A-x>", "<Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
     api.nvim_buf_set_keymap(buf, "i", "<A-x>", "<Esc><Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
 
     local width  = math.ceil(vim.o.columns * 0.8)
@@ -79,10 +78,20 @@ function M.create_popup(initial_content_or_bufnr)
         col       = col,
         style     = 'minimal',
         border    = 'rounded',
-        title     = " Multi_Context_Chat ",
+        title     = " Multi_Context_Chat | ~0 tokens ",
         title_pos = 'center',
     })
     M.popup_win = win
+
+    -- =======================================================
+    -- ATUALIZADOR AO VIVO: Modificado pelo usuário
+    -- =======================================================
+    api.nvim_create_autocmd({"TextChanged", "TextChangedI", "TextChangedP"}, {
+        buffer = buf,
+        callback = function()
+            require('multi_context.ui.popup').update_title()
+        end
+    })
 
     api.nvim_create_autocmd("WinClosed", {
         pattern  = tostring(win),
@@ -96,98 +105,109 @@ function M.create_popup(initial_content_or_bufnr)
 
     hl.apply_chat(buf)
     M.create_folds(buf)
+    
+    M.update_title()
 
     return buf, win
 end
 
 function M.fold_text()
-	local lines_count = vim.v.foldend - vim.v.foldstart + 1
-	local preview = ""
-	for i = vim.v.foldstart, vim.v.foldend do
-		local l = vim.fn.getline(i)
-		if l:match("%S") then
-			preview = vim.trim(l)
-			break
-		end
-	end
-	return "    ↳ ⋯ [" .. lines_count .. " linhas ocultas] ⋯  " .. preview
+    local lines_count = vim.v.foldend - vim.v.foldstart + 1
+    local preview = ""
+    for i = vim.v.foldstart, vim.v.foldend do
+        local l = vim.fn.getline(i)
+        if l:match("%S") then
+            preview = vim.trim(l)
+            break
+        end
+    end
+    return "    ↳ ⋯ [" .. lines_count .. " linhas ocultas] ⋯  " .. preview
 end
 
 function M.create_folds(buf)
-	if not buf or not api.nvim_buf_is_valid(buf) then return end
+    if not buf or not api.nvim_buf_is_valid(buf) then return end
 
-	local config = require('multi_context.config')
-	local user_name = config.options.user_name or "User"
+    local config = require('multi_context.config')
+    local user_name = config.options.user_name or "User"
 
-	vim.schedule(function()
-		if not api.nvim_buf_is_valid(buf) then return end
+    vim.schedule(function()
+        if not api.nvim_buf_is_valid(buf) then return end
 
-		local windows = vim.fn.win_findbuf(buf)
-		for _, win in ipairs(windows) do
-			if api.nvim_win_is_valid(win) then
-				vim.api.nvim_win_call(win, function()
-					vim.cmd("setlocal foldmethod=manual")
-					vim.cmd("setlocal foldexpr=")
-					vim.cmd("setlocal foldtext=v:lua.require('multi_context.ui.popup').fold_text()")
-					pcall(vim.cmd, 'normal! zE')
+        local windows = vim.fn.win_findbuf(buf)
+        for _, win in ipairs(windows) do
+            if api.nvim_win_is_valid(win) then
+                vim.api.nvim_win_call(win, function()
+                    vim.cmd("setlocal foldmethod=manual")
+                    vim.cmd("setlocal foldexpr=")
+                    vim.cmd("setlocal foldtext=v:lua.require('multi_context.ui.popup').fold_text()")
+                    pcall(vim.cmd, 'normal! zE')
 
-					local total_lines = vim.api.nvim_buf_line_count(buf)
-					local headers = {}
+                    local total_lines = vim.api.nvim_buf_line_count(buf)
+                    local headers = {}
 
-					for lnum = 1, total_lines do
-						local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
-						if line and (line:match("^===") or line:match("^== Arquivo:") or 
-							line:match("^## " .. user_name .. " >>") or line:match("^## IA")) then
-							table.insert(headers, lnum)
-						end
-					end
+                    for lnum = 1, total_lines do
+                        local line = vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
+                        if line and (line:match("^===") or line:match("^== Arquivo:") or 
+                            line:match("^## " .. user_name .. " >>") or line:match("^## IA")) then
+                            table.insert(headers, lnum)
+                        end
+                    end
 
-					for idx, h_lnum in ipairs(headers) do
-						local header_text = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
+                    for idx, h_lnum in ipairs(headers) do
+                        local header_text = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
 
-						if not header_text:match("^## " .. user_name) then
-							local start_fold = h_lnum + 1
-							local end_fold = total_lines
+                        if not header_text:match("^## " .. user_name) then
+                            local start_fold = h_lnum + 1
+                            local end_fold = total_lines
 
-							-- A dobra engole TUDO até a linha imediatamente antes do próximo arquivo
-							if idx < #headers then
-								end_fold = headers[idx + 1] - 1
-							end
+                            if idx < #headers then
+                                end_fold = headers[idx + 1] - 1
+                            end
 
-							if end_fold >= start_fold then
-								pcall(vim.cmd, string.format("%d,%dfold", start_fold, end_fold))
-								pcall(vim.cmd, string.format("%dfoldclose", start_fold))
-							end
-						end
-					end
+                            if end_fold >= start_fold then
+                                pcall(vim.cmd, string.format("%d,%dfold", start_fold, end_fold))
+                                pcall(vim.cmd, string.format("%dfoldclose", start_fold))
+                            end
+                        end
+                    end
 
-					for i = #headers, 1, -1 do
-						local h_lnum = headers[i]
-						local l = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
-						if l and l:match("^## IA") then
-							pcall(vim.cmd, string.format("silent! %dfoldopen!", h_lnum + 1))
-							break
-						end
-					end
+                    for i = #headers, 1, -1 do
+                        local h_lnum = headers[i]
+                        local l = vim.api.nvim_buf_get_lines(buf, h_lnum - 1, h_lnum, false)[1]
+                        if l and l:match("^## IA") then
+                            pcall(vim.cmd, string.format("silent! %dfoldopen!", h_lnum + 1))
+                            break
+                        end
+                    end
 
-					-- TRUQUE DE MESTRE: Posicionamento elegante a 2/3 da tela
-					local win_height = vim.api.nvim_win_get_height(win)
-					local target_scrolloff = math.floor(win_height / 3)
-					local current_so = vim.wo.scrolloff
+                    local win_height = vim.api.nvim_win_get_height(win)
+                    local target_scrolloff = math.floor(win_height / 3)
+                    local current_so = vim.wo.scrolloff
 
-					-- Aplica o scrolloff (que atua como um "colchão" no fundo da janela)
-					vim.wo.scrolloff = target_scrolloff
-
-					-- Move o cursor logicamente para o fundo ('zb') que será barrado pelo colchão
-					pcall(vim.cmd, "normal! zb")
-
-					-- Devolve o scrolloff padrão para não afetar sua navegação depois
-					vim.wo.scrolloff = current_so
-				end)
-			end
-		end
-	end)
+                    vim.wo.scrolloff = target_scrolloff
+                    pcall(vim.cmd, "normal! zb")
+                    vim.wo.scrolloff = current_so
+                end)
+            end
+        end
+    end)
 end
 
-function M.update_title() end
+-- =======================================================
+-- MÁGICA VISUAL: Altera o Título da Janela Dinamicamente
+-- =======================================================
+function M.update_title()
+    if not M.popup_buf or not api.nvim_buf_is_valid(M.popup_buf) then return end
+    if not M.popup_win or not api.nvim_win_is_valid(M.popup_win) then return end
+    
+    local ok, conf = pcall(api.nvim_win_get_config, M.popup_win)
+    if ok and conf.relative and conf.relative ~= "" then
+        local utils = require('multi_context.utils')
+        local tokens = utils.estimate_tokens(M.popup_buf)
+        
+        local new_title = string.format(" Multi_Context_Chat | ~%d tokens ", tokens)
+        pcall(api.nvim_win_set_config, M.popup_win, { title = new_title, title_pos = 'center' })
+    end
+end
+
 return M

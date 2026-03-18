@@ -1,11 +1,11 @@
 {
-  "default_api": "google_gemini_3.1-pro",
+  "default_api": "deepseek",
   "fallback_mode": false,
   "apis": [
     {
       "headers": {
-        "X-goog-api-key": "{API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-goog-api-key": "{API_KEY}"
       },
       "api_type": "gemini",
       "name": "google_gemini_3.1-pro",
@@ -16,8 +16,8 @@
     },
     {
       "headers": {
-        "X-goog-api-key": "{API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-goog-api-key": "{API_KEY}"
       },
       "api_type": "gemini",
       "name": "google_gemini_2.5-pro",
@@ -28,8 +28,8 @@
     },
     {
       "headers": {
-        "X-goog-api-key": "{API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-goog-api-key": "{API_KEY}"
       },
       "api_type": "gemini",
       "name": "google_gemini_2.5-flash",
@@ -40,8 +40,8 @@
     },
     {
       "headers": {
-        "X-goog-api-key": "{API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-goog-api-key": "{API_KEY}"
       },
       "api_type": "gemini",
       "name": "google_gemini_2.0-flash",

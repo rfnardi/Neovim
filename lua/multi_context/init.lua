@@ -152,13 +152,11 @@ function M.SendFromPopup()
     local active_agent_prompt = ""
     local text_to_send = current_user_text
 
-		local agent_match = current_user_text:match("@([%w_]+)")
+    local agent_match = current_user_text:match("@([%w_]+)")
     if agent_match and agents[agent_match] then
         active_agent_name = agent_match
         active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(agent_match) .. " ===\n" .. agents[agent_match].system_prompt
         
-        -- INJEÇÃO DINÂMICA DE FERRAMENTAS
-        -- Se o JSON disser que o agente usa ferramentas, anexa o manual completo!
         if agents[agent_match].use_tools then
             local tools_manual = require('multi_context.agents').get_tools_manual()
             active_agent_prompt = active_agent_prompt .. "\n\n" .. tools_manual
@@ -170,16 +168,23 @@ function M.SendFromPopup()
     local sending_msg = "[Enviando requisição" .. (active_agent_name and (" via @" .. active_agent_name) or "") .. "...]"
     api.nvim_buf_set_lines(buf, -1, -1, false, { "", sending_msg })
 
-    local all_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
-    local full_context = table.concat(all_lines, "\n")
+    local history_lines = api.nvim_buf_get_lines(buf, 0, start_idx, false)
+    local history_text = table.concat(history_lines, "\n")
     
+    local system_prompt = "Você é um Engenheiro de Software Autônomo operando dentro do Neovim. Você tem acesso ao código do projeto no histórico do chat e pode interagir com o sistema do usuário."
     if active_agent_prompt ~= "" then
-        full_context = full_context .. active_agent_prompt
+        system_prompt = system_prompt .. "\n\n" .. active_agent_prompt
     end
     
+    local full_user_content = ""
+    if history_text ~= "" then
+        full_user_content = history_text .. "\n\n"
+    end
+    full_user_content = full_user_content .. user_prefix .. " " .. text_to_send
+    
     local messages = {
-        { role = "system", content = full_context },
-        { role = "user", content = text_to_send }
+        { role = "system", content = system_prompt },
+        { role = "user", content = full_user_content }
     }
 
     local api_client = require('multi_context.api_client')
@@ -218,6 +223,7 @@ function M.SendFromPopup()
                     local new_count = api.nvim_buf_line_count(buf)
                     api.nvim_win_set_cursor(popup.popup_win, { new_count, 0 })
                     vim.cmd("normal! zz")
+                    popup.update_title() -- O TAXÍMETRO: Atualiza tokens durante streaming!
                 end
             end
         end,
@@ -227,7 +233,7 @@ function M.SendFromPopup()
             local next_prompt_lines = { "", "## API atual: " .. api_entry.name, user_prefix .. " " }
             
             if queued_user_text ~= "" then
-                table.insert(next_prompt_lines, "> [Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
+                table.insert(next_prompt_lines, ">[Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
                 local queued_split = vim.split(queued_user_text, "\n")
                 for _, q_line in ipairs(queued_split) do
                     table.insert(next_prompt_lines, q_line)
@@ -238,6 +244,7 @@ function M.SendFromPopup()
             
             require('multi_context.ui.highlights').apply_chat(buf)
             require('multi_context.ui.popup').create_folds(buf)
+            popup.update_title() -- Atualiza tokens ao finalizar
             
             if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
                 local count = api.nvim_buf_line_count(buf)
@@ -273,9 +280,6 @@ function M.ExecuteTools()
 
     local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
     
-    -- BLINDAGEM DE ESCOPO: Encontra a ÚLTIMA resposta da IA.
-    -- Isso garante que não vamos executar tags coladas acidentalmente 
-    -- no prompt do usuário (como exemplos em código-fonte).
     local last_ia_idx = 0
     for i = #lines, 1, -1 do
         if lines[i]:match("^## IA") then
@@ -289,7 +293,6 @@ function M.ExecuteTools()
         return
     end
 
-    -- Separa o conteúdo do usuário (intocável) e o conteúdo da IA (a ser processado)
     local prefix_lines = {}
     for i = 1, last_ia_idx - 1 do
         table.insert(prefix_lines, lines[i])
@@ -329,7 +332,6 @@ function M.ExecuteTools()
         end
         if path then path = vim.trim(path) end
         
-        -- BLINDAGEM DE ATRIBUTOS: Reconstrói a tag do zero para evitar nomes duplicados
         local clean_attrs = string.format(' name="%s"', tostring(name))
         if path and path ~= "" then
             clean_attrs = clean_attrs .. string.format(' path="%s"', path)
@@ -353,7 +355,6 @@ function M.ExecuteTools()
         has_changes = true
 
         if choice == 2 then
-            -- Usa o clean_attrs limpo, sem herdar a duplicação
             return string.format(
                 '<tool_rejected%s>\n%s\n</tool_rejected>\n\n>[Sistema]: Acesso NEGADO pelo usuario. A ferramenta não foi executada.',
                 clean_attrs, inner
@@ -364,7 +365,7 @@ function M.ExecuteTools()
         elseif name == "read_file" then result = tools.read_file(path)
         elseif name == "edit_file" then result = tools.edit_file(path, payload)
         elseif name == "run_shell" then result = tools.run_shell(payload)
-        else result = "Erro: Ferramenta [" .. tostring(name) .. "] desconhecida ou mal formatada." end
+        else result = "Erro: Ferramenta[" .. tostring(name) .. "] desconhecida ou mal formatada." end
         
         return string.format(
             '<tool_executed%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
@@ -375,7 +376,6 @@ function M.ExecuteTools()
     if has_changes then
         local new_process_lines = vim.split(new_content, "\n", {plain=true})
         
-        -- Junta a parte de cima intacta com a parte processada da IA
         local final_lines = {}
         for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
         for _, l in ipairs(new_process_lines) do table.insert(final_lines, l) end
@@ -391,6 +391,7 @@ function M.ExecuteTools()
         vim.cmd("silent! checktime")
         require('multi_context.ui.highlights').apply_chat(buf)
         require('multi_context.ui.popup').create_folds(buf)
+        require('multi_context.ui.popup').update_title() -- ATUALIZA TOKENS após executar ferramentas
     else
         vim.notify("Nenhuma <tool_call> pendente encontrada na última resposta da IA.", vim.log.levels.WARN)
     end
