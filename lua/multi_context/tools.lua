@@ -8,6 +8,19 @@ local function get_repo_root()
     return vim.fn.system("git rev-parse --show-toplevel"):gsub("\n", "")
 end
 
+-- Resolve o caminho de forma inteligente (Absoluto vs Relativo)
+local function resolve_path(path)
+    path = vim.trim(path)
+    -- Se a IA fornecer um caminho absoluto (começa com '/'), usa ele direto
+    if path:sub(1, 1) == "/" then
+        return path
+    end
+    
+    -- Se for relativo, junta com a raiz do projeto (ou o diretório atual)
+    local root = get_repo_root() or vim.fn.getcwd()
+    return root .. "/" .. path
+end
+
 M.list_files = function()
     local root = get_repo_root()
     if not root then return "ERRO: O agente tentou listar arquivos fora de um repositório Git." end
@@ -18,8 +31,7 @@ M.list_files = function()
 end
 
 M.read_file = function(path)
-    local root = get_repo_root() or vim.fn.getcwd()
-    local full_path = root .. "/" .. path
+    local full_path = resolve_path(path)
     if vim.fn.filereadable(full_path) == 0 then 
         return "ERRO: Arquivo não encontrado (" .. full_path .. ")" 
     end
@@ -27,8 +39,7 @@ M.read_file = function(path)
 end
 
 M.edit_file = function(path, content)
-    local root = get_repo_root() or vim.fn.getcwd()
-    local full_path = root .. "/" .. path
+    local full_path = resolve_path(path)
     
     -- Permite criar as pastas do caminho caso o agente esteja criando um arquivo novo
     local dir = vim.fn.fnamemodify(full_path, ":h")
@@ -36,12 +47,15 @@ M.edit_file = function(path, content)
         vim.fn.mkdir(dir, "p")
     end
 
+    -- Remove as quebras de linha sujas do XML
     content = content:gsub("^\n", "")
     content = content:gsub("\n$", "")
 
     local lines = vim.split(content, "\n", {plain=true})
     vim.fn.writefile(lines, full_path)
-    return "SUCESSO: Arquivo " .. path .. " foi salvo/atualizado."
+    
+    -- Retorna o caminho real para a IA saber exatamente onde salvou
+    return "SUCESSO: Arquivo " .. full_path .. " foi salvo/atualizado."
 end
 
 M.run_shell = function(cmd)
