@@ -308,7 +308,7 @@ function M.ExecuteTools()
     local approve_all = false
     local abort_all = false
 
-    local new_content = content_to_process:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
+local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
         if abort_all then
             return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
         end
@@ -318,28 +318,38 @@ function M.ExecuteTools()
         
         local name = attrs:match('name="([^"]+)"')
         local path = attrs:match('path="([^"]+)"')
+        local query = attrs:match('query="([^"]+)"')
+        local start_line = attrs:match('start="([^"]+)"')
+        local end_line = attrs:match('end="([^"]+)"')
         local payload = inner
         
+        -- Fallback JSON caso a IA erre a tag
         if not name or name == "" then
             local ok, json = pcall(vim.fn.json_decode, vim.trim(inner))
             if ok and type(json) == "table" then
                 name = json.name
                 if type(json.arguments) == "table" then
                     path = json.arguments.path
+                    query = json.arguments.query
+                    start_line = json.arguments.start or json.arguments.start_line
+                    end_line = json.arguments.end or json.arguments.end_line
                     payload = json.arguments.command or json.arguments.content or json.arguments.code or ""
                 end
             end
         end
         if path then path = vim.trim(path) end
         
+        -- Monta os atributos limpos para devolver à interface
         local clean_attrs = string.format(' name="%s"', tostring(name))
-        if path and path ~= "" then
-            clean_attrs = clean_attrs .. string.format(' path="%s"', path)
-        end
+        if path and path ~= "" then clean_attrs = clean_attrs .. string.format(' path="%s"', path) end
+        if query and query ~= "" then clean_attrs = clean_attrs .. string.format(' query="%s"', query) end
+        if start_line and start_line ~= "" then clean_attrs = clean_attrs .. string.format(' start="%s"', start_line) end
+        if end_line and end_line ~= "" then clean_attrs = clean_attrs .. string.format(' end="%s"', end_line) end
 
         local choice = 1
         if not approve_all then
             local target = path and ("\nAlvo: " .. path) or ""
+            target = query and (target .. "\nBusca: " .. query) or target
             local msg = string.format("Permitir execução de [%s]?%s", tostring(name), target)
             choice = vim.fn.confirm(msg, "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
         end
@@ -361,11 +371,14 @@ function M.ExecuteTools()
             )
         end
 
+        -- ROTEAMENTO DAS FERRAMENTAS: Inclui as duas novas!
         if name == "list_files" then result = tools.list_files()
         elseif name == "read_file" then result = tools.read_file(path)
         elseif name == "edit_file" then result = tools.edit_file(path, payload)
         elseif name == "run_shell" then result = tools.run_shell(payload)
-        else result = "Erro: Ferramenta[" .. tostring(name) .. "] desconhecida ou mal formatada." end
+        elseif name == "search_code" then result = tools.search_code(query)
+        elseif name == "replace_lines" then result = tools.replace_lines(path, start_line, end_line, payload)
+        else result = "Erro: Ferramenta [" .. tostring(name) .. "] desconhecida ou mal formatada." end
         
         return string.format(
             '<tool_executed%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
