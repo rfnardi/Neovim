@@ -223,7 +223,7 @@ function M.SendFromPopup()
                     local new_count = api.nvim_buf_line_count(buf)
                     api.nvim_win_set_cursor(popup.popup_win, { new_count, 0 })
                     vim.cmd("normal! zz")
-                    popup.update_title() -- O TAXÍMETRO: Atualiza tokens durante streaming!
+                    popup.update_title()
                 end
             end
         end,
@@ -233,7 +233,7 @@ function M.SendFromPopup()
             local next_prompt_lines = { "", "## API atual: " .. api_entry.name, user_prefix .. " " }
             
             if queued_user_text ~= "" then
-                table.insert(next_prompt_lines, ">[Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
+                table.insert(next_prompt_lines, "> [Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
                 local queued_split = vim.split(queued_user_text, "\n")
                 for _, q_line in ipairs(queued_split) do
                     table.insert(next_prompt_lines, q_line)
@@ -244,7 +244,7 @@ function M.SendFromPopup()
             
             require('multi_context.ui.highlights').apply_chat(buf)
             require('multi_context.ui.popup').create_folds(buf)
-            popup.update_title() -- Atualiza tokens ao finalizar
+            popup.update_title()
             
             if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
                 local count = api.nvim_buf_line_count(buf)
@@ -308,7 +308,7 @@ function M.ExecuteTools()
     local approve_all = false
     local abort_all = false
 
-local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
+    local new_content = content_to_process:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
         if abort_all then
             return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
         end
@@ -323,7 +323,6 @@ local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(att
         local end_line = attrs:match('end="([^"]+)"')
         local payload = inner
         
-        -- Fallback JSON caso a IA erre a tag
         if not name or name == "" then
             local ok, json = pcall(vim.fn.json_decode, vim.trim(inner))
             if ok and type(json) == "table" then
@@ -332,14 +331,16 @@ local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(att
                     path = json.arguments.path
                     query = json.arguments.query
                     start_line = json.arguments.start or json.arguments.start_line
-                    end_line = json.arguments.end or json.arguments.end_line
+                    
+                    -- A CORREÇÃO ESTÁ AQUI: Usando ["end"] para fugir da palavra reservada do Lua
+                    end_line = json.arguments["end"] or json.arguments.end_line
+                    
                     payload = json.arguments.command or json.arguments.content or json.arguments.code or ""
                 end
             end
         end
         if path then path = vim.trim(path) end
         
-        -- Monta os atributos limpos para devolver à interface
         local clean_attrs = string.format(' name="%s"', tostring(name))
         if path and path ~= "" then clean_attrs = clean_attrs .. string.format(' path="%s"', path) end
         if query and query ~= "" then clean_attrs = clean_attrs .. string.format(' query="%s"', query) end
@@ -371,14 +372,13 @@ local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(att
             )
         end
 
-        -- ROTEAMENTO DAS FERRAMENTAS: Inclui as duas novas!
         if name == "list_files" then result = tools.list_files()
         elseif name == "read_file" then result = tools.read_file(path)
         elseif name == "edit_file" then result = tools.edit_file(path, payload)
         elseif name == "run_shell" then result = tools.run_shell(payload)
         elseif name == "search_code" then result = tools.search_code(query)
         elseif name == "replace_lines" then result = tools.replace_lines(path, start_line, end_line, payload)
-        else result = "Erro: Ferramenta [" .. tostring(name) .. "] desconhecida ou mal formatada." end
+        else result = "Erro: Ferramenta[" .. tostring(name) .. "] desconhecida ou mal formatada." end
         
         return string.format(
             '<tool_executed%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
@@ -404,7 +404,7 @@ local new_content = content:gsub('<tool_call(.-)>(.-)</tool_call>', function(att
         vim.cmd("silent! checktime")
         require('multi_context.ui.highlights').apply_chat(buf)
         require('multi_context.ui.popup').create_folds(buf)
-        require('multi_context.ui.popup').update_title() -- ATUALIZA TOKENS após executar ferramentas
+        require('multi_context.ui.popup').update_title()
     else
         vim.notify("Nenhuma <tool_call> pendente encontrada na última resposta da IA.", vim.log.levels.WARN)
     end
