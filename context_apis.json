@@ -103,6 +103,18 @@
         "Authorization": "{API_KEY}"
       },
       "api_type": "openai",
+      "name": "zai_GLM-5",
+      "model": "glm-5",
+      "num_tries": 3,
+      "url": "https://api.z.ai/api/paas/v4/chat/completions",
+      "include_in_fall-back_mode": false
+    },
+    {
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "{API_KEY}"
+      },
+      "api_type": "openai",
       "name": "openai",
       "model": "gpt-3.5-turbo",
       "num_tries": 3,
@@ -119,18 +131,6 @@
       "model": "llama3-8b-8192",
       "num_tries": 1,
       "url": "https://api.groq.com/openai/v1/chat/completions",
-      "include_in_fall-back_mode": false
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {API_KEY}"
-      },
-      "api_type": "openai",
-      "name": "deepseek",
-      "model": "deepseek-chat",
-      "num_tries": 3,
-      "url": "https://api.deepseek.com/chat/completions",
       "include_in_fall-back_mode": false
     },
     {

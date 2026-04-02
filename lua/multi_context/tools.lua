@@ -10,6 +10,9 @@ end
 
 -- Resolve o caminho de forma inteligente (Absoluto vs Relativo)
 local function resolve_path(path)
+    -- BLINDAGEM: Se o parâmetro for nulo (a IA esqueceu), interrompe com graciosidade
+    if not path or path == "" then return nil end
+    
     path = vim.trim(path)
     if path:sub(1, 1) == "/" then return path end
     local root = get_repo_root() or vim.fn.getcwd()
@@ -18,19 +21,23 @@ end
 
 M.list_files = function()
     local root = get_repo_root()
-    if not root then return "ERRO: Fora de um repositório Git." end
+    if not root then return "ERRO: O agente tentou listar arquivos fora de um repositório Git." end
     local files = vim.fn.system("git -C " .. vim.fn.shellescape(root) .. " ls-files")
     return "Arquivos rastreados pelo Git no repositório:\n" .. files
 end
 
 M.read_file = function(path)
     local full_path = resolve_path(path)
+    if not full_path then return "ERRO: O atributo 'path' é obrigatório e não foi fornecido na tag." end
+    
     if vim.fn.filereadable(full_path) == 0 then return "ERRO: Arquivo não encontrado (" .. full_path .. ")" end
     return table.concat(vim.fn.readfile(full_path), "\n")
 end
 
 M.edit_file = function(path, content)
     local full_path = resolve_path(path)
+    if not full_path then return "ERRO: O atributo 'path' é obrigatório para editar arquivos." end
+    
     local dir = vim.fn.fnamemodify(full_path, ":h")
     if vim.fn.isdirectory(dir) == 0 then vim.fn.mkdir(dir, "p") end
 
@@ -50,6 +57,8 @@ M.edit_file = function(path, content)
 end
 
 M.run_shell = function(cmd)
+    if not cmd or cmd == "" then return "ERRO: O comando do terminal não foi fornecido." end
+    
     local root = get_repo_root() or vim.fn.getcwd()
     cmd = vim.trim(cmd)
     local bash_script = string.format("cd %s && %s", vim.fn.shellescape(root), cmd)
@@ -66,7 +75,7 @@ end
 M.search_code = function(query)
     local root = get_repo_root()
     if not root then return "ERRO: O agente tentou buscar código fora de um repositório Git." end
-    if not query or query == "" then return "ERRO: Query de busca vazia." end
+    if not query or query == "" then return "ERRO: O atributo 'query' é obrigatório para a busca." end
     
     -- Roda 'git grep -n -i -I' (ignora case, mostra nº da linha, ignora binários)
     local cmd = string.format("git -C %s grep -n -i -I %s", vim.fn.shellescape(root), vim.fn.shellescape(query))
@@ -86,6 +95,8 @@ end
 
 M.replace_lines = function(path, start_line, end_line, content)
     local full_path = resolve_path(path)
+    if not full_path then return "ERRO: O atributo 'path' é obrigatório." end
+    
     start_line = tonumber(start_line)
     end_line = tonumber(end_line)
     
