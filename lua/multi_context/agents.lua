@@ -61,6 +61,14 @@ CÓDIGO INTEIRO AQUI
 Formato:
 <tool_call name="run_shell">
 comando bash aqui
+
+7. Reescrever e Comprimir o Chat (rewrite_chat_buffer) - EXCLUSIVO DO ENGENHEIRO DE PROMPT
+Apaga TODO o histórico do chat atual e substitui apenas pelo conteúdo que você enviar dentro desta tag. Use para salvar tokens em chats massivos. VOCÊ DEVE manter a estrutura (## Usuario >> e ## IA >>) no novo texto.
+Formato:
+<tool_call name="rewrite_chat_buffer">
+## Nome_Do_Usuario >> [Resumo do que foi pedido]
+## IA >> [Resumo do estado atual do projeto]
+</tool_call>
 </tool_call>
 ]]
 end

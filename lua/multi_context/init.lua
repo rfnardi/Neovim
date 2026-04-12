@@ -16,6 +16,7 @@ M.is_autonomous = false
 M.active_agent = nil
 M.auto_loop_count = 0
 M.queued_tasks = nil
+M.last_backup = nil
 
 M.setup = function(opts)
     if config and config.setup then config.setup(opts) end
@@ -30,8 +31,23 @@ M.ContextChatGit = commands.ContextChatGit
 M.ContextApis = commands.ContextApis
 M.ContextTree = commands.ContextTree
 M.ContextBuffers = commands.ContextBuffers
-
 M.TogglePopup = commands.TogglePopup
+
+M.ContextUndo = function()
+    local p = require('multi_context.ui.popup')
+    local buf = p.popup_buf
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then buf = vim.api.nvim_get_current_buf() end
+    if M.last_backup then
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.last_backup)
+        require('multi_context.ui.highlights').apply_chat(buf)
+        require('multi_context.ui.popup').create_folds(buf)
+        require('multi_context.ui.popup').update_title()
+        vim.notify("✅ Chat restaurado do último backup com sucesso!", vim.log.levels.INFO)
+    else
+        vim.notify("Nenhum backup de compressão encontrado nesta sessão.", vim.log.levels.WARN)
+    end
+end
+
 M.ToggleWorkspaceView = function()
     local ui_popup = require('multi_context.ui.popup')
     local is_popup = (ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) and vim.api.nvim_get_current_win() == ui_popup.popup_win)
@@ -89,20 +105,12 @@ M.TerminateTurn = function()
     end
 end
 
--- ======================================================
--- LEITURA DO CONTEXT.MD
--- ======================================================
 local function get_context_md_content()
     local root = vim.fn.system("git rev-parse --show-toplevel")
-    if vim.v.shell_error == 0 then
-        root = root:gsub("\n", "")
-    else
-        root = vim.fn.getcwd()
-    end
+    if vim.v.shell_error == 0 then root = root:gsub("\n", "") else root = vim.fn.getcwd() end
     local filepath = root .. "/CONTEXT.md"
     if vim.fn.filereadable(filepath) == 1 then
-        local lines = vim.fn.readfile(filepath)
-        return table.concat(lines, "\n")
+        return table.concat(vim.fn.readfile(filepath), "\n")
     end
     return nil
 end
@@ -169,19 +177,18 @@ function M.SendFromPopup()
     local history_text = table.concat(history_lines, "\n")
     
     local system_prompt = "Você é um Engenheiro de Software Autônomo no Neovim."
-    
-    -- INJEÇÃO DO CONTEXT.MD AQUI
     local memory_context = get_context_md_content()
     if memory_context then
         system_prompt = system_prompt .. "\n\n=== ESTADO ATUAL DO PROJETO (MEMÓRIA) ===\n" .. memory_context
     end
-
     if active_agent_prompt ~= "" then system_prompt = system_prompt .. "\n\n" .. active_agent_prompt end
     
     local full_user_content = (history_text ~= "" and history_text .. "\n\n" or "") .. user_prefix .. " " .. text_to_send
     local messages = { { role = "system", content = system_prompt }, { role = "user", content = full_user_content } }
 
     local response_started = false
+    local current_ia_start_idx = nil
+    
     local function remove_sending_msg()
         local count = api.nvim_buf_line_count(buf)
         local last_line = api.nvim_buf_get_lines(buf, count - 1, count, false)[1]
@@ -193,7 +200,11 @@ function M.SendFromPopup()
             if not response_started then
                 remove_sending_msg()
                 local ia_title = "## IA (" .. api_entry.model .. ")" .. (active_agent_name and ("[@" .. active_agent_name .. "]") or "") .. " >> "
+                local count_before = api.nvim_buf_line_count(buf)
                 api.nvim_buf_set_lines(buf, -1, -1, false, { "", ia_title, "" })
+                
+                -- SALVA O NUMERO DA LINHA EXATA DAQUI PRA FRENTE (1-based index)
+                current_ia_start_idx = count_before + 2
                 response_started = true
             end
             if chunk and chunk ~= "" then
@@ -213,16 +224,15 @@ function M.SendFromPopup()
             
             local b_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
             local has_tool = false
-            for i = #b_lines, 1, -1 do
-                if b_lines[i]:match("^## IA") then break end
+            
+            -- AGORA ELE LÊ APENAS O TEXTO DESTA ITERAÇÃO (Isolado de fraudes da IA)
+            local scan_start = current_ia_start_idx or 1
+            for i = scan_start, #b_lines do
                 if b_lines[i]:match("<tool_call") then has_tool = true; break end
             end
 
-            if has_tool then
-                vim.defer_fn(function() require('multi_context').ExecuteTools() end, 100)
-            else
-                M.TerminateTurn()
-            end
+            if has_tool then vim.defer_fn(function() require('multi_context').ExecuteTools(current_ia_start_idx) end, 100)
+            else M.TerminateTurn() end
         end,
         function(err_msg)
             remove_sending_msg()
@@ -232,14 +242,22 @@ function M.SendFromPopup()
     )
 end
 
-function M.ExecuteTools()
+function M.ExecuteTools(ia_idx)
     local p = require('multi_context.ui.popup')
     local buf = p.popup_buf
     if not buf or not vim.api.nvim_buf_is_valid(buf) then buf = vim.api.nvim_get_current_buf() end
 
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local last_ia_idx = 0
-    for i = #lines, 1, -1 do if lines[i]:match("^## IA") then last_ia_idx = i; break end end
+    local last_ia_idx = ia_idx
+    
+    if not last_ia_idx then
+        -- Fallback seguro para chamadas manuais (Atalho do Teclado)
+        last_ia_idx = 0
+        for i = #lines, 1, -1 do if lines[i]:match("^## IA %(") then last_ia_idx = i; break end end
+        if last_ia_idx == 0 then
+            for i = #lines, 1, -1 do if lines[i]:match("^## IA") then last_ia_idx = i; break end end
+        end
+    end
     if last_ia_idx == 0 then return end
 
     local prefix_lines = {}; for i = 1, last_ia_idx - 1 do table.insert(prefix_lines, lines[i]) end
@@ -248,6 +266,7 @@ function M.ExecuteTools()
     
     local new_content = ""; local cursor = 1; local has_changes = false
     local abort_all = false; local approve_all = false
+    local pending_rewrite_content = nil
 
     local dangerous_commands = {"rm%s+-rf", "mkfs", "sudo ", ">%s*/dev", "chmod ", "chown "}
     local function is_dangerous(cmd)
@@ -265,15 +284,9 @@ function M.ExecuteTools()
         local close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
         
         local inner = ""
-        -- BLINDAGEM 1: Se a IA esqueceu de fechar a tag, fechamos forçadamente.
-        if not close_start then 
-            inner = content_to_process:sub(tag_end + 1)
-            close_end = #content_to_process
-        else
-            inner = content_to_process:sub(tag_end + 1, close_start - 1)
-        end
+        if not close_start then inner = content_to_process:sub(tag_end + 1); close_end = #content_to_process
+        else inner = content_to_process:sub(tag_end + 1, close_start - 1) end
         
-        -- BLINDAGEM 2: Fallback para IAs que cospem JSON
         local attrs_str = tag_str:sub(11, -2)
         local function get_attr(n) return attrs_str:match(n .. '%s*=%s*["\']([^"\']+)["\']') end
         local name = get_attr("name"); local path = get_attr("path"); local query = get_attr("query")
@@ -292,7 +305,6 @@ function M.ExecuteTools()
             end
         end
 
-        -- BLINDAGEM 3: Limpa Markdown intruso dentro da tag
         local clean_inner = inner:gsub("^%s*```[%w_]*\n", ""):gsub("\n%s*```%s*$", "")
         
         if abort_all then
@@ -305,10 +317,13 @@ function M.ExecuteTools()
                     if name == "run_shell" and is_dangerous(clean_inner) then
                         vim.notify("🛡️ Comando PERIGOSO detectado.", vim.log.levels.ERROR)
                         choice = vim.fn.confirm("Permitir execução PERIGOSA: " .. clean_inner, "&Sim\n&Nao\n&Todos\n&Cancelar", 2)
+                    elseif name == "rewrite_chat_buffer" then
+                        choice = vim.fn.confirm("Agente solicitou DESTRUIR E COMPRIMIR o chat. Permitir?", "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
                     else choice = 3; approve_all = true end
                 else
                     local target = path and ("\nAlvo: " .. path) or ""
                     target = query and (target .. "\nBusca: " .. query) or target
+                    if name == "rewrite_chat_buffer" then target = "\n[ALERTA DESTRUTIVO: Isso reescreverá o buffer]" end
                     choice = vim.fn.confirm(string.format("Agente requisitou [%s]. Permitir?%s", tostring(name), target), "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
                 end
             end
@@ -322,7 +337,14 @@ function M.ExecuteTools()
                 new_content = new_content .. string.format('<tool_rejected name="%s">\n%s\n</tool_rejected>\n\n>[Sistema]: %s', tostring(name), clean_inner, result)
             else
                 local tools = require('multi_context.tools')
-                if name == "list_files" then result = tools.list_files()
+                if name == "rewrite_chat_buffer" then
+                    M.last_backup = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                    local backup_file = vim.fn.stdpath("data") .. "/mctx_backup_" .. os.date("%Y%m%d_%H%M%S") .. ".mctx"
+                    vim.fn.writefile(M.last_backup, backup_file)
+                    vim.notify("💾 Backup pré-compressão salvo (use :ContextUndo para reverter)", vim.log.levels.INFO)
+                    pending_rewrite_content = clean_inner
+                    result = "Buffer reescrito."
+                elseif name == "list_files" then result = tools.list_files()
                 elseif name == "read_file" then result = tools.read_file(path)
                 elseif name == "edit_file" then result = tools.edit_file(path, clean_inner)
                 elseif name == "run_shell" then result = tools.run_shell(clean_inner)
@@ -330,7 +352,9 @@ function M.ExecuteTools()
                 elseif name == "replace_lines" then result = tools.replace_lines(path, start_line, end_line, clean_inner)
                 else result = "Erro: Ferramenta desconhecida." end
                 
-                new_content = new_content .. string.format('<tool_executed name="%s" path="%s">\n%s\n</tool_executed>\n\n>[Sistema]: Resultado:\n```text\n%s\n```', tostring(name), tostring(path), clean_inner, result)
+                if not pending_rewrite_content then
+                    new_content = new_content .. string.format('<tool_executed name="%s" path="%s">\n%s\n</tool_executed>\n\n>[Sistema]: Resultado:\n```text\n%s\n```', tostring(name), tostring(path), clean_inner, result)
+                end
             end
         end
         ::continue::
@@ -339,10 +363,15 @@ function M.ExecuteTools()
 
     if not has_changes or abort_all then M.TerminateTurn(); return end
 
-    local final_lines = {}
-    for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
-    for _, l in ipairs(vim.split(new_content, "\n", {plain=true})) do table.insert(final_lines, l) end
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
+    if pending_rewrite_content then
+        local rewrite_lines = vim.split(pending_rewrite_content, "\n", {plain=true})
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, rewrite_lines)
+    else
+        local final_lines = {}
+        for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
+        for _, l in ipairs(vim.split(new_content, "\n", {plain=true})) do table.insert(final_lines, l) end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
+    end
 
     M.auto_loop_count = M.auto_loop_count + 1
     if M.auto_loop_count >= 15 then
@@ -352,7 +381,7 @@ function M.ExecuteTools()
 
     local cfg = require('multi_context.config')
     local user_prefix = "## " .. (cfg.options.user_name or "Nardi") .. " >>"
-    local sys_msg = "[Sistema]: Ferramentas executadas. Leia o resultado acima. Se a tarefa foi concluída, informe o resultado final e atualize o CONTEXT.md se necessário."
+    local sys_msg = "[Sistema]: Ferramentas executadas. Leia o resultado. Se a tarefa foi concluída, informe o resultado final."
 
     local b_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     table.insert(b_lines, ""); table.insert(b_lines, user_prefix .. " " .. sys_msg)
@@ -370,6 +399,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
 
 vim.cmd([[
   command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
+  command! -nargs=0 ContextUndo lua require('multi_context').ContextUndo()
   command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
   command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()
   command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()

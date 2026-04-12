@@ -1,0 +1,38 @@
+
+## User >> Resuma este prompt mantendo as informações essenciais da conversa.
+
+## IA >> **Resumo da Conversa**
+
+- **Objetivo Inicial:** Analisar e melhorar o `README.md` do projeto MultiContext AI, comparando-o com o estado atual e preenchendo lacunas identificadas.
+- **Avaliação do @inspetor_semantico:** Identificou 10 áreas faltantes no README (instalação, exemplos de uso, segurança, `CONTEXT.md`, arquitetura, testes, contribuição, roadmap, provedores de IA, internacionalização) e recomendou melhorias.
+- **Ação do @documentador:** Reescreveu o `README.md` adicionando:
+  - Visão geral do plugin.
+  - Funcionalidades destacadas.
+  - Instruções detalhadas de **instalação** (vim‑plug, packer, lazy.nvim) e dependências externas.
+  - **Configuração** completa com exemplo Lua, variáveis de ambiente e listas de comandos permitidos/proibidos.
+  - Guia rápido de **uso** com atalhos e fluxo de trabalho.
+  - Seção de **segurança** (validação de comandos, lista branca, limites de iteração, confirmações e logs).
+  - Descrição da **memória de longo prazo** (`CONTEXT.md`) e comandos para reset/export.
+  - Diagrama e explicação da **arquitetura interna** (UI popup, conversation, api_selector, api_client, tools, queue_editor).
+  - Instruções de **testes** (framework busted, CI GitHub Actions, lint/format).
+  - Guia de **contribuição**, link para `CONTRIBUTING.md`, código de conduta e licença MIT.
+  - **Roadmap** com versões, marcos, datas estimadas e métricas de desempenho.
+  - Lista de **provedores de IA** suportados, modelos, limites e comando para alternância de provedor.
+  - Nota sobre **internacionalização** e arquivos de tradução.
+  - Licença MIT e data da última atualização (2026‑04‑12).
+
+- **Resultado da edição:** Arquivo `README.md` foi sobrescrito/creado com sucesso.
+- **Problema subsequente:** Tentativa de usar o modelo `openai/gpt-oss-120b` falhou por exceder limite de tokens (erro de TPM). O usuário solicitou agora um resumo conciso da conversa.
+
+**Resumo Final:** O README foi completamente atualizado, cobrindo instalação, configuração, uso, segurança, memória, arquitetura, testes, contribuição, roadmap, provedores de IA e i18n. O plugin agora possui documentação robusta e pronta para uso e contribuição. A última mensagem de erro indica necessidade de reduzir tamanho das solicitações ao modelo de IA.
+
+## User >> [Sistema]: Ferramentas executadas. Leia o resultado. Se a tarefa foi concluída, informe o resultado final.
+
+## IA (openai/gpt-oss-120b)[@engenheiro_de_prompt] >> 
+
+
+**[ERRO OPENAI]:** Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01k5vgw1hbfq4tg35b79z049y7` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Used 5977, Requested 3806. Please try again in 13.372499999s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing
+
+
+## API atual: groq
+## User >> 
