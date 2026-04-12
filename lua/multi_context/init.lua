@@ -41,7 +41,7 @@ M.ToggleWorkspaceView = function()
         M.current_workspace_file = utils.export_to_workspace(table.concat(lines, "\n"), M.current_workspace_file)
     else
         local cur_buf = vim.api.nvim_get_current_buf()
-        if vim.api.nvim_buf_get_name(cur_buf):match("multi_context_chats.*%.mctx$") then
+        if vim.api.nvim_buf_get_name(cur_buf):match("%.mctx$") then
             M.current_workspace_file = vim.api.nvim_buf_get_name(cur_buf)
             ui_popup.create_popup(cur_buf)
         else

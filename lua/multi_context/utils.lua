@@ -2,9 +2,6 @@
 local M   = {}
 local api = vim.api
 
--- =======================================================
--- MOTOR DE ESTIMATIVA DE TOKENS (Heurística Ultrarrápida)
--- =======================================================
 M.estimate_tokens = function(buf)
     if not buf or not api.nvim_buf_is_valid(buf) then return 0 end
     local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -12,7 +9,6 @@ M.estimate_tokens = function(buf)
     for _, line in ipairs(lines) do
         char_count = char_count + #line + 1
     end
-    -- Padrão da indústria (OpenAI/Gemini): 1 Token ≈ 4 caracteres
     return math.floor(char_count / 4)
 end
 
@@ -20,8 +16,16 @@ M.export_to_workspace = function(content, existing_filename)
     local filename = existing_filename
     if not filename then
         local timestamp = os.date("%Y%m%d_%H%M%S")
-        local cwd = vim.fn.getcwd()
-        local chat_dir = cwd .. "/.mctx_chats"
+        
+        -- MÁGICA: Busca a raiz do projeto atual
+        local root = vim.fn.system("git rev-parse --show-toplevel")
+        if vim.v.shell_error == 0 then
+            root = root:gsub("\n", "")
+        else
+            root = vim.fn.getcwd() -- Fallback caso não seja repositório git
+        end
+        
+        local chat_dir = root .. "/.mctx_chats"
         
         if vim.fn.isdirectory(chat_dir) == 0 then
             vim.fn.mkdir(chat_dir, "p")

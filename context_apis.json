@@ -128,7 +128,7 @@
       },
       "api_type": "openai",
       "name": "groq",
-      "model": "llama3-8b-8192",
+      "model": "openai/gpt-oss-120b",
       "num_tries": 1,
       "url": "https://api.groq.com/openai/v1/chat/completions",
       "include_in_fall-back_mode": false
