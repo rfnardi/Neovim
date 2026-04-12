@@ -269,115 +269,148 @@ end
 -- ======================================================
 -- Executor de Ferramentas (Aprovação Manual e Seletiva)
 -- ======================================================
-
--- FASE 1: Limpeza garantida de tmpfiles na saída do Neovim
-vim.api.nvim_create_autocmd("VimLeavePre", {
-    callback = function()
-        if _G.MultiContextTempFiles then
-            for _, f in ipairs(_G.MultiContextTempFiles) do pcall(os.remove, f) end
-        end
-    end
-})
-
--- Substitui a M.ExecuteTools pelo novo Scanner Funcional
 function M.ExecuteTools()
     local p = require('multi_context.ui.popup')
     local buf = p.popup_buf
-    if not buf or not vim.api.nvim_buf_is_valid(buf) then buf = vim.api.nvim_get_current_buf() end
+    
+    if not buf or not api.nvim_buf_is_valid(buf) then
+        buf = api.nvim_get_current_buf()
+        if vim.bo[buf].filetype ~= "multicontext_chat" then return end
+    end
 
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+    
     local last_ia_idx = 0
-    for i = #lines, 1, -1 do if lines[i]:match("^## IA") then last_ia_idx = i; break end end
-    if last_ia_idx == 0 then return end
+    for i = #lines, 1, -1 do
+        if lines[i]:match("^## IA") then
+            last_ia_idx = i
+            break
+        end
+    end
+    
+    if last_ia_idx == 0 then
+        vim.notify("Nenhuma resposta da IA encontrada para executar ferramentas.", vim.log.levels.WARN)
+        return
+    end
 
     local prefix_lines = {}
-    for i = 1, last_ia_idx - 1 do table.insert(prefix_lines, lines[i]) end
-    local process_lines = {}
-    for i = last_ia_idx, #lines do table.insert(process_lines, lines[i]) end
-    local content_to_process = table.concat(process_lines, "\n")
-    
-    local new_content = ""
-    local cursor = 1
-    local has_changes = false
-    local abort_all = false
-    local approve_all = false
-
-    -- Scanner Tolerante (Lida com quebras de linha/espaços em atributos)
-    while cursor <= #content_to_process do
-        local tag_start, tag_end = content_to_process:find("<tool_call[^>]*>", cursor)
-        if not tag_start then
-            new_content = new_content .. content_to_process:sub(cursor)
-            break
-        end
-
-        new_content = new_content .. content_to_process:sub(cursor, tag_start - 1)
-        local tag_str = content_to_process:sub(tag_start, tag_end)
-        
-        local close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
-        if not close_start then
-            new_content = new_content .. content_to_process:sub(tag_start)
-            break
-        end
-
-        local inner = content_to_process:sub(tag_end + 1, close_start - 1)
-        
-        if abort_all then
-            new_content = new_content .. tag_str .. inner .. "</tool_call>"
-            cursor = close_end + 1
-        else
-            has_changes = true
-            local attrs_str = tag_str:sub(11, -2)
-            
-            local function get_attr(name)
-                local m = attrs_str:match(name .. '%s*=%s*["\']([^"\']+)["\']')
-                return m
-            end
-            
-            local name = get_attr("name")
-            local path = get_attr("path")
-            local query = get_attr("query")
-            local start_line = get_attr("start")
-            local end_line = get_attr("end")
-
-            local tools = require('multi_context.tools')
-            local choice = 1
-            if not approve_all then
-                local target = path and ("\nAlvo: " .. path) or ""
-                target = query and (target .. "\nBusca: " .. query) or target
-                choice = vim.fn.confirm(string.format("Permitir execução de[%s]?%s", tostring(name), target), "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
-            end
-
-            if choice == 3 then approve_all = true; choice = 1
-            elseif choice == 4 or choice == 0 then abort_all = true; new_content = new_content .. tag_str .. inner .. "</tool_call>"; cursor = close_end + 1; goto continue end
-
-            local result = ""
-            if choice == 2 then
-                result = "Acesso NEGADO pelo usuario."
-                new_content = new_content .. string.format('<tool_rejected name="%s">\n%s\n</tool_rejected>\n\n>[Sistema]: %s', tostring(name), inner, result)
-            else
-                if name == "list_files" then result = tools.list_files()
-                elseif name == "read_file" then result = tools.read_file(path)
-                elseif name == "edit_file" then result = tools.edit_file(path, inner)
-                elseif name == "run_shell" then result = tools.run_shell(inner)
-                elseif name == "search_code" then result = tools.search_code(query)
-                elseif name == "replace_lines" then result = tools.replace_lines(path, start_line, end_line, inner)
-                else result = "Erro: Ferramenta desconhecida." end
-                
-                new_content = new_content .. string.format('<tool_executed name="%s" path="%s">\n%s\n</tool_executed>\n\n>[Sistema]: Resultado:\n```text\n%s\n```', tostring(name), tostring(path), inner, result)
-            end
-        end
-        ::continue::
-        cursor = close_end + 1
+    for i = 1, last_ia_idx - 1 do
+        table.insert(prefix_lines, lines[i])
     end
+    
+    local process_lines = {}
+    for i = last_ia_idx, #lines do
+        table.insert(process_lines, lines[i])
+    end
+    
+    local content_to_process = table.concat(process_lines, "\n")
+    local has_changes = false
+    local approve_all = false
+    local abort_all = false
+
+    local new_content = content_to_process:gsub('<tool_call(.-)>(.-)</tool_call>', function(attrs, inner)
+        if abort_all then
+            return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
+        end
+
+        local tools = require('multi_context.tools')
+        local result = ""
+        
+        local name = attrs:match('name="([^"]+)"')
+        local path = attrs:match('path="([^"]+)"')
+        local query = attrs:match('query="([^"]+)"')
+        local start_line = attrs:match('start="([^"]+)"')
+        local end_line = attrs:match('end="([^"]+)"')
+        local payload = inner
+        
+        if not name or name == "" then
+            local ok, json = pcall(vim.fn.json_decode, vim.trim(inner))
+            if ok and type(json) == "table" then
+                name = json.name
+                if type(json.arguments) == "table" then
+                    path = json.arguments.path
+                    query = json.arguments.query
+                    start_line = json.arguments.start or json.arguments.start_line
+                    
+                    -- A CORREÇÃO ESTÁ AQUI: Usando ["end"] para fugir da palavra reservada do Lua
+                    end_line = json.arguments["end"] or json.arguments.end_line
+                    
+                    payload = json.arguments.command or json.arguments.content or json.arguments.code or ""
+                end
+            end
+        end
+        if path then path = vim.trim(path) end
+        
+        local clean_attrs = string.format(' name="%s"', tostring(name))
+        if path and path ~= "" then clean_attrs = clean_attrs .. string.format(' path="%s"', path) end
+        if query and query ~= "" then clean_attrs = clean_attrs .. string.format(' query="%s"', query) end
+        if start_line and start_line ~= "" then clean_attrs = clean_attrs .. string.format(' start="%s"', start_line) end
+        if end_line and end_line ~= "" then clean_attrs = clean_attrs .. string.format(' end="%s"', end_line) end
+
+        local choice = 1
+        if not approve_all then
+            local target = path and ("\nAlvo: " .. path) or ""
+            target = query and (target .. "\nBusca: " .. query) or target
+            local msg = string.format("Permitir execução de [%s]?%s", tostring(name), target)
+            choice = vim.fn.confirm(msg, "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
+        end
+
+        if choice == 3 then
+            approve_all = true
+            choice = 1
+        elseif choice == 4 or choice == 0 then
+            abort_all = true
+            return '<tool_call' .. attrs .. '>' .. inner .. '</tool_call>'
+        end
+
+        has_changes = true
+
+        if choice == 2 then
+            return string.format(
+                '<tool_rejected%s>\n%s\n</tool_rejected>\n\n>[Sistema]: Acesso NEGADO pelo usuario. A ferramenta não foi executada.',
+                clean_attrs, inner
+            )
+        end
+
+        if name == "list_files" then result = tools.list_files()
+        elseif name == "read_file" then result = tools.read_file(path)
+        elseif name == "edit_file" then result = tools.edit_file(path, payload)
+        elseif name == "run_shell" then result = tools.run_shell(payload)
+        elseif name == "search_code" then result = tools.search_code(query)
+        elseif name == "replace_lines" then result = tools.replace_lines(path, start_line, end_line, payload)
+        else result = "Erro: Ferramenta[" .. tostring(name) .. "] desconhecida ou mal formatada." end
+        
+        return string.format(
+            '<tool_executed%s>\n%s\n</tool_executed>\n\n>[Sistema]: Resultado da Ferramenta:\n```text\n%s\n```',
+            clean_attrs, inner, result
+        )
+    end)
 
     if has_changes then
+        local new_process_lines = vim.split(new_content, "\n", {plain=true})
+        
         local final_lines = {}
         for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
-        for _, l in ipairs(vim.split(new_content, "\n", {plain=true})) do table.insert(final_lines, l) end
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
+        for _, l in ipairs(new_process_lines) do table.insert(final_lines, l) end
+        
+        api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
+        
+        if abort_all then
+            vim.notify("Execução em lote cancelada.", vim.log.levels.WARN)
+        else
+            vim.notify("Ferramentas processadas!", vim.log.levels.INFO)
+        end
+        
+        vim.cmd("silent! checktime")
         require('multi_context.ui.highlights').apply_chat(buf)
+        require('multi_context.ui.popup').create_folds(buf)
+        require('multi_context.ui.popup').update_title()
+    else
+        vim.notify("Nenhuma <tool_call> pendente encontrada na última resposta da IA.", vim.log.levels.WARN)
     end
 end
+
+M.ExecuteTools = M.ExecuteTools
 
 vim.cmd([[
   command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
