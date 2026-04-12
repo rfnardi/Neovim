@@ -32,3 +32,37 @@ describe("Conversation Module:", function()
         assert.truthy(line:match("%[Sistema%]"))
     end)
 end)
+
+    it("Deve construir o array de mensagens (build_history) perfeitamente", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        
+        -- Simulando um chat complexo com várias quebras de linha e rodapés
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "## Nardi >> Primeiro comando",
+            "Detalhes do comando",
+            "",
+            "## IA (gpt-4) >>",
+            "Resposta da IA",
+            "Mais texto da IA",
+            "",
+            "## API atual: groq", -- Isso DEVE ser ignorado pelo parser
+            "## Nardi >> Segundo comando"
+        })
+        
+        local msgs = conv.build_history(buf)
+        
+        -- Verifica se gerou exatamente 3 blocos lógicos
+        assert.are.same(3, #msgs)
+        
+        -- Bloco 1 (User)
+        assert.are.same("user", msgs[1].role)
+        assert.are.same("Primeiro comando\nDetalhes do comando", msgs[1].content)
+        
+        -- Bloco 2 (Assistant)
+        assert.are.same("assistant", msgs[2].role)
+        assert.are.same("Resposta da IA\nMais texto da IA", msgs[2].content)
+        
+        -- Bloco 3 (User)
+        assert.are.same("user", msgs[3].role)
+        assert.are.same("Segundo comando", msgs[3].content)
+    end)
