@@ -58,10 +58,9 @@ M.export_to_workspace = function(content, existing_filename)
 end
 
 M.split_lines = function(s)
-    local t = {}
-    if not s or s == "" then return t end
-    for l in s:gmatch("([^\n]*)\n?") do table.insert(t, l) end
-    return t
+    if not s or s == "" then return {} end
+    -- Usa a API nativa e otimizada do Neovim (não gera arrays com posições vazias fantasmas)
+    return vim.split(s, "\n", { plain = true })
 end
 
 M.insert_after = function(buf, line_idx, lines)

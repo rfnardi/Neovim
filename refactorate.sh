@@ -1,116 +1,33 @@
 #!/bin/bash
 
 PLUGIN_DIR="$HOME/.config/nvim/lua/multi_context"
-echo "📂 Ajustando isolamento de Workspace (.mctx_chats) por projeto..."
+echo "🛠️ Corrigindo utils.lua (split_lines)..."
 
-echo "🛠️ Atualizando utils.lua..."
-cat << 'EOF' > "$PLUGIN_DIR/utils.lua"
--- lua/multi_context/utils.lua
-local M   = {}
-local api = vim.api
+# Substitui a função `split_lines` no utils.lua usando o `awk` de forma segura
+awk '/M\.split_lines = function\(s\)/{
+  print "M.split_lines = function(s)"
+  print "    if not s or s == \"\" then return {} end"
+  print "    -- Usa a API nativa e otimizada do Neovim (não gera arrays com posições vazias fantasmas)"
+  print "    return vim.split(s, \"\\n\", { plain = true })"
+  print "end"
+  skip=1
+  next
+}
+skip && /^end$/{skip=0;next}
+skip{next}
+1' "$PLUGIN_DIR/utils.lua" > "$PLUGIN_DIR/utils.tmp" && mv "$PLUGIN_DIR/utils.tmp" "$PLUGIN_DIR/utils.lua"
 
-M.estimate_tokens = function(buf)
-    if not buf or not api.nvim_buf_is_valid(buf) then return 0 end
-    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
-    local char_count = 0
-    for _, line in ipairs(lines) do
-        char_count = char_count + #line + 1
-    end
-    return math.floor(char_count / 4)
+echo "🛠️ Silenciando o aviso do Plenary no minimal_init.lua..."
+cat << 'EOF' > "$PLUGIN_DIR/tests/minimal_init.lua"
+vim.cmd([[set runtimepath+=. ]])
+
+-- Tenta adicionar Plenary via vim-plug silenciosamente, se existir
+local plenary_dir = vim.fn.expand("~/.config/nvim/plugged/plenary.nvim")
+if vim.fn.isdirectory(plenary_dir) == 1 then
+    vim.cmd("set runtimepath+=" .. plenary_dir)
 end
 
-M.export_to_workspace = function(content, existing_filename)
-    local filename = existing_filename
-    if not filename then
-        local timestamp = os.date("%Y%m%d_%H%M%S")
-        
-        -- MÁGICA: Busca a raiz do projeto atual
-        local root = vim.fn.system("git rev-parse --show-toplevel")
-        if vim.v.shell_error == 0 then
-            root = root:gsub("\n", "")
-        else
-            root = vim.fn.getcwd() -- Fallback caso não seja repositório git
-        end
-        
-        local chat_dir = root .. "/.mctx_chats"
-        
-        if vim.fn.isdirectory(chat_dir) == 0 then
-            vim.fn.mkdir(chat_dir, "p")
-        end
-        filename = chat_dir .. "/chat_" .. timestamp .. ".mctx"
-    end
-    
-    vim.cmd("edit " .. filename)
-    
-    local new_buf = vim.api.nvim_get_current_buf()
-    vim.bo[new_buf].filetype = "multicontext_chat"
-    
-    local lines = M.split_lines(content)
-    vim.api.nvim_buf_set_lines(new_buf, 0, -1, false, lines)
-    vim.bo[new_buf].modified = true
-    
-    local last_line = vim.api.nvim_buf_line_count(new_buf)
-    vim.api.nvim_win_set_cursor(0, { last_line, 0 })
-    vim.cmd("stopinsert")
-    
-    require('multi_context.ui.highlights').apply_chat(new_buf)
-    require('multi_context.ui.popup').create_folds(new_buf)
-    
-    local km = { noremap = true, silent = true }
-    vim.api.nvim_buf_set_keymap(new_buf, "i", "@", "@<Esc><Cmd>lua require('multi_context.agents').open_agent_selector()<CR>", km)
-    vim.api.nvim_buf_set_keymap(new_buf, "n", "<A-x>", "<Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
-    vim.api.nvim_buf_set_keymap(new_buf, "i", "<A-x>", "<Esc><Cmd>lua require('multi_context').ExecuteTools()<CR>", km)
-
-    return filename
-end
-
-M.split_lines = function(s)
-    local t = {}
-    if not s or s == "" then return t end
-    for l in s:gmatch("([^\n]*)\n?") do table.insert(t, l) end
-    return t
-end
-
-M.insert_after = function(buf, line_idx, lines)
-    local target = (line_idx == -1) and api.nvim_buf_line_count(buf) or line_idx
-    api.nvim_buf_set_lines(buf, target, target, false, lines)
-end
-
-M.copy_code_block = function()
-    local buf    = api.nvim_get_current_buf()
-    local cursor = api.nvim_win_get_cursor(0)[1]
-    local lines  = api.nvim_buf_get_lines(buf, 0, -1, false)
-    local s, e   = nil, nil
-    for i = cursor, 1, -1 do
-        if lines[i] and lines[i]:match("^```") then s = i; break end
-    end
-    for i = cursor, #lines do
-        if lines[i] and lines[i]:match("^```") and i ~= s then e = i; break end
-    end
-    if s and e then
-        vim.fn.setreg('+', table.concat(api.nvim_buf_get_lines(buf, s, e - 1, false), "\n"))
-        vim.notify("Código copiado!")
-    else
-        vim.notify("Nenhum bloco de código encontrado.", vim.log.levels.WARN)
-    end
-end
-
-M.apply_highlights        = function(b) require('multi_context.ui.highlights').apply_chat(b) end
-M.get_git_diff            = function()  return require('multi_context.context_builders').get_git_diff() end
-M.get_tree_context        = function()  return require('multi_context.context_builders').get_tree_context() end
-M.get_all_buffers_content = function()  return require('multi_context.context_builders').get_all_buffers_content() end
-M.find_last_user_line     = function(b) return require('multi_context.conversation').find_last_user_line(b) end
-M.load_api_config         = function()  return require('multi_context.config').load_api_config() end
-M.load_api_keys           = function()  return require('multi_context.config').load_api_keys() end
-M.set_selected_api        = function(n) return require('multi_context.config').set_selected_api(n) end
-M.get_api_names           = function()  return require('multi_context.config').get_api_names() end
-M.get_current_api         = function()  return require('multi_context.config').get_current_api() end
-
-return M
+require('multi_context.config').setup({ user_name = "Nardi" })
 EOF
 
-echo "🛠️ Corrigindo Regex no init.lua para ToggleWorkspace..."
-# Isso substitui a string exata na função M.ToggleWorkspaceView para não exigir o prefixo "multi_context_chats"
-sed -i 's/"multi_context_chats.\*%.mctx$"/"%.mctx$"/g' "$PLUGIN_DIR/init.lua"
-
-echo "✅ Fase 4 concluída!"
+echo "✅ Correção aplicada! Pode rodar 'make test' novamente!"
