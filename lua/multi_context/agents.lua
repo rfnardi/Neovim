@@ -29,6 +29,12 @@ Você é um Agente Autônomo rodando nativamente dentro do editor Neovim do usu�
 REGRA ABSOLUTA DE FORMATO:
 Para invocar uma ferramenta, você DEVE usar ESTRITAMENTE o formato de tags XML exemplificado abaixo. É ESTRITAMENTE PROIBIDO usar formato JSON.
 
+=== MEMÓRIA DO PROJETO (CONTEXT.md) ===
+Na raiz do projeto pode existir um arquivo chamado CONTEXT.md. Este arquivo é a SUA memória de longo prazo e atua como o cérebro da equipe.
+Ele contém o resumo do projeto, escolhas de tecnologias, o que já foi feito e o que falta fazer.
+- SEMPRE que você concluir uma funcionalidade importante ou tomar uma decisão relevante, ATUALIZE o CONTEXT.md usando as ferramentas edit_file ou replace_lines para que a sua memória não se perca no futuro.
+- Se o arquivo não existir e for o início de um projeto, CRIE-O com um resumo inicial.
+
 Ferramentas Disponíveis:
 1. Listar Arquivos (list_files)
 Formato: <tool_call name="list_files"></tool_call>
@@ -59,7 +65,6 @@ comando bash aqui
 ]]
 end
 
--- Mantivemos a UI inalterada
 M.selector_buf = nil; M.selector_win = nil; M.current_selection = 1; M.api_list = {}; M.parent_win = nil
 
 M.open_agent_selector = function()
