@@ -16,17 +16,23 @@ end
 
 M.apply_chat = function(buf)
     if not api.nvim_buf_is_valid(buf) then return end
+    
     vim.api.nvim_buf_call(buf, function()
         M.define_groups()
+        
         vim.cmd("syntax match ContextHeader '^===.*'")
         vim.cmd("syntax match ContextHeader '^== Arquivo:.*'")
         vim.cmd("syntax match ContextCurrentBuffer '^## buffer atual ##'")
         vim.cmd("syntax match ContextUpdateMessages '\\[mensagem enviada\\]'")
         vim.cmd("syntax match ContextUpdateMessages '\\[Enviando requisição.*\\]'")
         
-        -- AGORA ELE PINTA DE VERMELHO QUALQUER "## [PALAVRA] >>"
-        vim.cmd("syntax match ContextUser '^## [%w_]+ >>.*'")
+        -- CORREÇÃO: Usando o Regex nativo do Vim (.*)
+        -- 1. Pinta QUALQUER cabecalho "## QualquerNome >>" de Vermelho
+        vim.cmd("syntax match ContextUser '^## .* >>.*'")
+        
+        -- 2. Sobrescreve com Azul especificamente se for "## IA"
         vim.cmd("syntax match ContextUserAI '^## IA.*'")
+        
         vim.cmd("syntax match ContextApiInfo '^## API atual:.*'")
         
         vim.cmd("syntax region ContextBold matchgroup=ContextBoldText start='\\*\\*' end='\\*\\*'")
@@ -41,6 +47,7 @@ M.apply_selector = function(buf, api_list)
     M.define_groups()
     api.nvim_buf_add_highlight(buf, -1, "ContextSelectorTitle", 0, 0, -1)
     api.nvim_buf_add_highlight(buf, -1, "ContextSelectorTitle", 1, 0, -1)
+
     for i = 3, 3 + #api_list - 1 do
         local line = api.nvim_buf_get_lines(buf, i, i + 1, false)[1]
         if line then
@@ -48,6 +55,7 @@ M.apply_selector = function(buf, api_list)
             if line:match("%(selecionada%)$") then api.nvim_buf_add_highlight(buf, -1, "ContextSelectorSelected", i, 0, -1) end
         end
     end
+
     local total = api.nvim_buf_line_count(buf)
     if total >= 2 then api.nvim_buf_add_highlight(buf, -1, "ContextSelectorTitle", total - 2, 0, -1) end
 end
