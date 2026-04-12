@@ -10,13 +10,18 @@ local M = {}
 M.popup_buf = popup.popup_buf
 M.popup_win = popup.popup_win
 M.history = {}
-M.context_text = nil
 M.current_workspace_file = nil
 
+-- ======================================================
+-- ESTADO DO MODO AUTÔNOMO, IDENTIDADE E FILA
+-- ======================================================
+M.is_autonomous = false
+M.active_agent = nil
+M.auto_loop_count = 0
+M.queued_tasks = nil
+
 M.setup = function(opts)
-    if config and config.setup then
-        config.setup(opts)
-    end
+    if config and config.setup then config.setup(opts) end
 end
 
 M.ContextChatFull = commands.ContextChatFull
@@ -29,56 +34,18 @@ M.ContextApis = commands.ContextApis
 M.ContextTree = commands.ContextTree
 M.ContextBuffers = commands.ContextBuffers
 
-M.TogglePopup = function()
-    local p = require('multi_context.ui.popup')
-    
-    if p.popup_win and api.nvim_win_is_valid(p.popup_win) then
-        api.nvim_win_hide(p.popup_win)
-        return
-    end
-    
-    if p.popup_buf and api.nvim_buf_is_valid(p.popup_buf) then
-        local width = math.floor(vim.o.columns * 0.7)
-        local height = math.floor(vim.o.lines * 0.7)
-        local row = math.floor((vim.o.lines - height) / 2)
-        local col = math.floor((vim.o.columns - width) / 2)
-
-        p.popup_win = api.nvim_open_win(p.popup_buf, true, {
-            relative = "editor",
-            width = width,
-            height = height,
-            row = row,
-            col = col,
-            style = "minimal",
-            border = "rounded",
-            title = " Multi_Context_Chat ",
-            title_pos = "center",
-        })
-        
-        local lines = vim.api.nvim_buf_get_lines(p.popup_buf, 0, -1, false)
-        api.nvim_win_set_cursor(p.popup_win, { #lines, #"## Nardi >> " })
-        vim.cmd('normal! zz')
-        return
-    end
-    
-    vim.notify("Nenhum chat aberto! Use :ContextTree ou :Context para criar um novo.", vim.log.levels.WARN)
-end
-commands.TogglePopup = M.TogglePopup
-
+M.TogglePopup = commands.TogglePopup
 M.ToggleWorkspaceView = function()
     local ui_popup = require('multi_context.ui.popup')
     local is_popup = (ui_popup.popup_win and vim.api.nvim_win_is_valid(ui_popup.popup_win) and vim.api.nvim_get_current_win() == ui_popup.popup_win)
-
     if is_popup then
         local lines = vim.api.nvim_buf_get_lines(ui_popup.popup_buf, 0, -1, false)
-        local content = table.concat(lines, "\n")
         vim.api.nvim_win_hide(ui_popup.popup_win)
-        M.current_workspace_file = utils.export_to_workspace(content, M.current_workspace_file)
+        M.current_workspace_file = utils.export_to_workspace(table.concat(lines, "\n"), M.current_workspace_file)
     else
         local cur_buf = vim.api.nvim_get_current_buf()
-        local name = vim.api.nvim_buf_get_name(cur_buf)
-        if name:match("multi_context_chats.*%.mctx$") then
-            M.current_workspace_file = name
+        if vim.api.nvim_buf_get_name(cur_buf):match("multi_context_chats.*%.mctx$") then
+            M.current_workspace_file = vim.api.nvim_buf_get_name(cur_buf)
             ui_popup.create_popup(cur_buf)
         else
             vim.notify("Você não está em um arquivo de workspace (.mctx).", vim.log.levels.WARN)
@@ -95,74 +62,96 @@ popup.create_popup = function(initial_content)
 end
 
 -- ======================================================
--- Envio para LLM (Com Suporte a Pipeline de Agentes)
+-- ENCERRAMENTO DE TURNO (Devolve controle ao Humano)
+-- ======================================================
+M.TerminateTurn = function()
+    M.auto_loop_count = 0
+    M.is_autonomous = false -- Desliga o auto mode para o próximo comando do usuário
+    
+    local p = require('multi_context.ui.popup')
+    local buf = p.popup_buf
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+    
+    local cfg = require('multi_context.config')
+    local current_api = cfg.get_current_api()
+    local user_prefix = "## " .. (cfg.options.user_name or "Nardi") .. " >>"
+    
+    local next_prompt_lines = { "", "## API atual: " .. current_api, user_prefix .. " " }
+    
+    if M.queued_tasks and M.queued_tasks ~= "" then
+        table.insert(next_prompt_lines, "> [Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
+        for _, q_line in ipairs(vim.split(M.queued_tasks, "\n")) do table.insert(next_prompt_lines, q_line) end
+        M.queued_tasks = nil
+    end
+    
+    vim.api.nvim_buf_set_lines(buf, -1, -1, false, next_prompt_lines)
+    require('multi_context.ui.popup').create_folds(buf)
+    require('multi_context.ui.highlights').apply_chat(buf)
+    require('multi_context.ui.popup').update_title()
+    
+    if p.popup_win and vim.api.nvim_win_is_valid(p.popup_win) then
+        vim.api.nvim_win_set_cursor(p.popup_win, { vim.api.nvim_buf_line_count(buf), #next_prompt_lines[#next_prompt_lines] })
+        vim.cmd("normal! zz"); vim.cmd("startinsert!")
+    end
+end
+
+-- ======================================================
+-- MOTOR CENTRAL DE ENVIO
 -- ======================================================
 function M.SendFromPopup()
-    if not popup.popup_buf or not api.nvim_buf_is_valid(popup.popup_buf) then
-        vim.notify("Popup não está aberto.", vim.log.levels.WARN)
-        return
-    end
-
+    if not popup.popup_buf or not api.nvim_buf_is_valid(popup.popup_buf) then return end
     local buf = popup.popup_buf
     local start_idx, _ = utils.find_last_user_line(buf)
-    
-    if not start_idx then
-        vim.notify("Nenhuma linha de usuário encontrada.", vim.log.levels.WARN)
-        return
-    end
+    if not start_idx then return end
 
-    local config = require('multi_context.config')
-    local user_prefix = "## " .. (config.options.user_name or "Nardi") .. " >>"
+    local cfg = require('multi_context.config')
+    local user_prefix = "## " .. (cfg.options.user_name or "Nardi") .. " >>"
     local lines = api.nvim_buf_get_lines(buf, start_idx, -1, false)
-    
-    if lines[1] then
-        lines[1] = lines[1]:gsub("^" .. user_prefix .. "%s*", "")
-    end
+    if lines[1] then lines[1] = lines[1]:gsub("^" .. user_prefix .. "%s*", "") end
 
     local agents = require('multi_context.agents').load_agents()
-    
-    local current_task_lines = {}
-    local queued_tasks_lines = {}
-    local found_agent_count = 0
+    local current_task_lines = {}; local queued_tasks_lines = {}; local found_agent_count = 0
 
     for _, line in ipairs(lines) do
         if not line:match("^> %[Checkpoint%]") then
-            local possible_agent = line:match("^@([%w_]+)") or line:match("%s+@([%w_]+)")
-            if possible_agent and agents[possible_agent] then
-                found_agent_count = found_agent_count + 1
-            end
-            
-            if found_agent_count <= 1 then
-                table.insert(current_task_lines, line)
-            else
-                table.insert(queued_tasks_lines, line)
-            end
+            local possible_agent = line:match("@([%w_]+)")
+            if possible_agent and agents[possible_agent] then found_agent_count = found_agent_count + 1 end
+            if found_agent_count <= 1 then table.insert(current_task_lines, line) else table.insert(queued_tasks_lines, line) end
         end
     end
 
     local current_user_text = table.concat(current_task_lines, "\n"):gsub("^%s*", ""):gsub("%s*$", "")
-    local queued_user_text = table.concat(queued_tasks_lines, "\n")
+    if #queued_tasks_lines > 0 then M.queued_tasks = table.concat(queued_tasks_lines, "\n") end
 
-    if current_user_text == "" then
-        vim.notify("Digite algo antes de enviar.", vim.log.levels.WARN)
-        return
-    end
+    if current_user_text == "" then vim.notify("Digite algo antes de enviar.", vim.log.levels.WARN); return end
 
     local active_agent_name = nil
     local active_agent_prompt = ""
     local text_to_send = current_user_text
 
-    local agent_match = current_user_text:match("@([%w_]+)")
-    if agent_match and agents[agent_match] then
-        active_agent_name = agent_match
-        active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(agent_match) .. " ===\n" .. agents[agent_match].system_prompt
-        
-        if agents[agent_match].use_tools then
-            local tools_manual = require('multi_context.agents').get_tools_manual()
-            active_agent_prompt = active_agent_prompt .. "\n\n" .. tools_manual
+    -- PARSER DA IDENTIDADE PERSISTENTE E MODO AUTO
+    local agent_match = text_to_send:match("@([%w_]+)")
+    if agent_match then
+        if agent_match == "reset" then
+            M.active_agent = nil
+            text_to_send = text_to_send:gsub("@reset%s*", "")
+        elseif agents[agent_match] then
+            M.active_agent = agent_match
+            text_to_send = text_to_send:gsub("@" .. agent_match .. "%s*", "")
         end
-        
-        text_to_send = current_user_text:gsub("@" .. agent_match .. "%s*", "")
+    end
+
+    if text_to_send:match("%-%-auto") then
+        M.is_autonomous = true
+        text_to_send = text_to_send:gsub("%-%-auto%s*", "")
+    end
+
+    if M.active_agent and agents[M.active_agent] then
+        active_agent_name = M.active_agent
+        active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(M.active_agent) .. " ===\n" .. agents[M.active_agent].system_prompt
+        if agents[M.active_agent].use_tools then
+            active_agent_prompt = active_agent_prompt .. "\n\n" .. require('multi_context.agents').get_tools_manual()
+        end
     end
 
     local sending_msg = "[Enviando requisição" .. (active_agent_name and (" via @" .. active_agent_name) or "") .. "...]"
@@ -171,115 +160,67 @@ function M.SendFromPopup()
     local history_lines = api.nvim_buf_get_lines(buf, 0, start_idx, false)
     local history_text = table.concat(history_lines, "\n")
     
-    local system_prompt = "Você é um Engenheiro de Software Autônomo operando dentro do Neovim. Você tem acesso ao código do projeto no histórico do chat e pode interagir com o sistema do usuário."
-    if active_agent_prompt ~= "" then
-        system_prompt = system_prompt .. "\n\n" .. active_agent_prompt
-    end
+    local system_prompt = "Você é um Engenheiro de Software Autônomo no Neovim."
+    if active_agent_prompt ~= "" then system_prompt = system_prompt .. "\n\n" .. active_agent_prompt end
     
-    local full_user_content = ""
-    if history_text ~= "" then
-        full_user_content = history_text .. "\n\n"
-    end
-    full_user_content = full_user_content .. user_prefix .. " " .. text_to_send
-    
-    local messages = {
-        { role = "system", content = system_prompt },
-        { role = "user", content = full_user_content }
-    }
+    local full_user_content = (history_text ~= "" and history_text .. "\n\n" or "") .. user_prefix .. " " .. text_to_send
+    local messages = { { role = "system", content = system_prompt }, { role = "user", content = full_user_content } }
 
-    local api_client = require('multi_context.api_client')
     local response_started = false
-
     local function remove_sending_msg()
         local count = api.nvim_buf_line_count(buf)
         local last_line = api.nvim_buf_get_lines(buf, count - 1, count, false)[1]
-        if last_line:match("%[Enviando requisi") then
-            api.nvim_buf_set_lines(buf, count - 2, count, false, {})
-        end
+        if last_line:match("%[Enviando requisi") then api.nvim_buf_set_lines(buf, count - 2, count, false, {}) end
     end
 
-    api_client.execute(messages, 
+    require('multi_context.api_client').execute(messages, 
         function(chunk, api_entry)
             if not response_started then
                 remove_sending_msg()
-                local ia_title = "## IA (" .. api_entry.model .. ")"
-                if active_agent_name then
-                    ia_title = ia_title .. "[@" .. active_agent_name .. "]"
-                end
-                ia_title = ia_title .. " >> "
+                local ia_title = "## IA (" .. api_entry.model .. ")" .. (active_agent_name and ("[@" .. active_agent_name .. "]") or "") .. " >> "
                 api.nvim_buf_set_lines(buf, -1, -1, false, { "", ia_title, "" })
                 response_started = true
             end
-            
             if chunk and chunk ~= "" then
                 local lines_to_add = vim.split(chunk, "\n", {plain = true})
                 local count = api.nvim_buf_line_count(buf)
                 local last_line = api.nvim_buf_get_lines(buf, count - 1, count, false)[1]
-                
                 lines_to_add[1] = last_line .. lines_to_add[1]
                 api.nvim_buf_set_lines(buf, count - 1, count, false, lines_to_add)
-                
                 if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
-                    local new_count = api.nvim_buf_line_count(buf)
-                    api.nvim_win_set_cursor(popup.popup_win, { new_count, 0 })
-                    vim.cmd("normal! zz")
-                    popup.update_title()
+                    api.nvim_win_set_cursor(popup.popup_win, { api.nvim_buf_line_count(buf), 0 })
+                    vim.cmd("normal! zz"); popup.update_title()
                 end
             end
         end,
         function(api_entry)
             if not response_started then remove_sending_msg() end
             
-            local next_prompt_lines = { "", "## API atual: " .. api_entry.name, user_prefix .. " " }
-            
-            if queued_user_text ~= "" then
-                table.insert(next_prompt_lines, "> [Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
-                local queued_split = vim.split(queued_user_text, "\n")
-                for _, q_line in ipairs(queued_split) do
-                    table.insert(next_prompt_lines, q_line)
-                end
+            -- ANALISA SE HOUVE USO DE FERRAMENTA
+            local b_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+            local has_tool = false
+            for i = #b_lines, 1, -1 do
+                if b_lines[i]:match("^## IA") then break end
+                if b_lines[i]:match("<tool_call") then has_tool = true; break end
             end
-            
-            api.nvim_buf_set_lines(buf, -1, -1, false, next_prompt_lines)
-            
-            require('multi_context.ui.highlights').apply_chat(buf)
-            require('multi_context.ui.popup').create_folds(buf)
-            popup.update_title()
-            
-            if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
-                local count = api.nvim_buf_line_count(buf)
-                api.nvim_win_set_cursor(popup.popup_win, { count, #next_prompt_lines[#next_prompt_lines] })
-                vim.cmd("normal! zz")
-                vim.cmd("startinsert!")
+
+            if has_tool then
+                vim.defer_fn(function() require('multi_context').ExecuteTools() end, 100)
+            else
+                M.TerminateTurn()
             end
         end,
         function(err_msg)
             remove_sending_msg()
-            api.nvim_buf_set_lines(buf, -1, -1, false, { 
-                "", "**[ERRO]** " .. err_msg, "", user_prefix .. " " 
-            })
-            if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
-                local count = api.nvim_buf_line_count(buf)
-                api.nvim_win_set_cursor(popup.popup_win, { count, #user_prefix + 1 })
-            end
+            api.nvim_buf_set_lines(buf, -1, -1, false, { "", "**[ERRO]** " .. err_msg, "", user_prefix .. " " })
+            M.is_autonomous = false
         end
     )
 end
 
 -- ======================================================
--- Executor de Ferramentas (Aprovação Manual e Seletiva)
+-- MOTOR DE EXECUÇÃO DE FERRAMENTAS E RETROALIMENTAÇÃO
 -- ======================================================
-
--- FASE 1: Limpeza garantida de tmpfiles na saída do Neovim
-vim.api.nvim_create_autocmd("VimLeavePre", {
-    callback = function()
-        if _G.MultiContextTempFiles then
-            for _, f in ipairs(_G.MultiContextTempFiles) do pcall(os.remove, f) end
-        end
-    end
-})
-
--- Substitui a M.ExecuteTools pelo novo Scanner Funcional
 function M.ExecuteTools()
     local p = require('multi_context.ui.popup')
     local buf = p.popup_buf
@@ -290,61 +231,52 @@ function M.ExecuteTools()
     for i = #lines, 1, -1 do if lines[i]:match("^## IA") then last_ia_idx = i; break end end
     if last_ia_idx == 0 then return end
 
-    local prefix_lines = {}
-    for i = 1, last_ia_idx - 1 do table.insert(prefix_lines, lines[i]) end
-    local process_lines = {}
-    for i = last_ia_idx, #lines do table.insert(process_lines, lines[i]) end
+    local prefix_lines = {}; for i = 1, last_ia_idx - 1 do table.insert(prefix_lines, lines[i]) end
+    local process_lines = {}; for i = last_ia_idx, #lines do table.insert(process_lines, lines[i]) end
     local content_to_process = table.concat(process_lines, "\n")
     
-    local new_content = ""
-    local cursor = 1
-    local has_changes = false
-    local abort_all = false
-    local approve_all = false
+    local new_content = ""; local cursor = 1; local has_changes = false
+    local abort_all = false; local approve_all = false
 
-    -- Scanner Tolerante (Lida com quebras de linha/espaços em atributos)
+    local dangerous_commands = {"rm%s+-rf", "mkfs", "sudo ", ">%s*/dev", "chmod ", "chown "}
+    local function is_dangerous(cmd)
+        if not cmd then return false end
+        for _, pat in ipairs(dangerous_commands) do if cmd:match(pat) then return true end end
+        return false
+    end
+
     while cursor <= #content_to_process do
         local tag_start, tag_end = content_to_process:find("<tool_call[^>]*>", cursor)
-        if not tag_start then
-            new_content = new_content .. content_to_process:sub(cursor)
-            break
-        end
+        if not tag_start then new_content = new_content .. content_to_process:sub(cursor); break end
 
         new_content = new_content .. content_to_process:sub(cursor, tag_start - 1)
         local tag_str = content_to_process:sub(tag_start, tag_end)
-        
         local close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
-        if not close_start then
-            new_content = new_content .. content_to_process:sub(tag_start)
-            break
-        end
+        if not close_start then new_content = new_content .. content_to_process:sub(tag_start); break end
 
         local inner = content_to_process:sub(tag_end + 1, close_start - 1)
         
         if abort_all then
-            new_content = new_content .. tag_str .. inner .. "</tool_call>"
-            cursor = close_end + 1
+            new_content = new_content .. tag_str .. inner .. "</tool_call>"; cursor = close_end + 1
         else
             has_changes = true
             local attrs_str = tag_str:sub(11, -2)
-            
-            local function get_attr(name)
-                local m = attrs_str:match(name .. '%s*=%s*["\']([^"\']+)["\']')
-                return m
-            end
-            
-            local name = get_attr("name")
-            local path = get_attr("path")
-            local query = get_attr("query")
-            local start_line = get_attr("start")
-            local end_line = get_attr("end")
+            local function get_attr(n) return attrs_str:match(n .. '%s*=%s*["\']([^"\']+)["\']') end
+            local name = get_attr("name"); local path = get_attr("path"); local query = get_attr("query")
+            local start_line = get_attr("start"); local end_line = get_attr("end")
 
-            local tools = require('multi_context.tools')
             local choice = 1
             if not approve_all then
-                local target = path and ("\nAlvo: " .. path) or ""
-                target = query and (target .. "\nBusca: " .. query) or target
-                choice = vim.fn.confirm(string.format("Permitir execução de[%s]?%s", tostring(name), target), "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
+                if M.is_autonomous then
+                    if name == "run_shell" and is_dangerous(inner) then
+                        vim.notify("🛡️ Segurança: Comando PERIGOSO detectado. Requer aprovação manual.", vim.log.levels.ERROR)
+                        choice = vim.fn.confirm("Permitir execução PERIGOSA: " .. inner, "&Sim\n&Nao\n&Todos\n&Cancelar", 2)
+                    else choice = 3; approve_all = true end
+                else
+                    local target = path and ("\nAlvo: " .. path) or ""
+                    target = query and (target .. "\nBusca: " .. query) or target
+                    choice = vim.fn.confirm(string.format("Agente requisitou [%s]. Permitir?%s", tostring(name), target), "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
+                end
             end
 
             if choice == 3 then approve_all = true; choice = 1
@@ -355,6 +287,7 @@ function M.ExecuteTools()
                 result = "Acesso NEGADO pelo usuario."
                 new_content = new_content .. string.format('<tool_rejected name="%s">\n%s\n</tool_rejected>\n\n>[Sistema]: %s', tostring(name), inner, result)
             else
+                local tools = require('multi_context.tools')
                 if name == "list_files" then result = tools.list_files()
                 elseif name == "read_file" then result = tools.read_file(path)
                 elseif name == "edit_file" then result = tools.edit_file(path, inner)
@@ -370,13 +303,30 @@ function M.ExecuteTools()
         cursor = close_end + 1
     end
 
-    if has_changes then
-        local final_lines = {}
-        for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
-        for _, l in ipairs(vim.split(new_content, "\n", {plain=true})) do table.insert(final_lines, l) end
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
-        require('multi_context.ui.highlights').apply_chat(buf)
+    if not has_changes or abort_all then M.TerminateTurn(); return end
+
+    local final_lines = {}
+    for _, l in ipairs(prefix_lines) do table.insert(final_lines, l) end
+    for _, l in ipairs(vim.split(new_content, "\n", {plain=true})) do table.insert(final_lines, l) end
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
+
+    M.auto_loop_count = M.auto_loop_count + 1
+    if M.auto_loop_count >= 15 then
+        vim.notify("Limite de 15 loops atingido. Pausando por segurança.", vim.log.levels.WARN)
+        M.TerminateTurn(); return
     end
+
+    -- RETROALIMENTAÇÃO LIMPA
+    local cfg = require('multi_context.config')
+    local user_prefix = "## " .. (cfg.options.user_name or "Nardi") .. " >>"
+    local sys_msg = "[Sistema]: Ferramentas executadas. Leia o resultado acima. Se a tarefa foi concluída, informe o resultado final."
+
+    local b_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    table.insert(b_lines, ""); table.insert(b_lines, user_prefix .. " " .. sys_msg)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, b_lines)
+    require('multi_context.ui.highlights').apply_chat(buf)
+
+    vim.defer_fn(function() require('multi_context').SendFromPopup() end, 100)
 end
 
 vim.cmd([[
