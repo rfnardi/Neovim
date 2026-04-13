@@ -13,8 +13,8 @@ M.find_last_user_line = function(buf)
     return nil
 end
 
-M.build_history = function(buf)
-    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+M.build_history = function(buf_or_lines)
+    local lines = type(buf_or_lines) == "table" and buf_or_lines or api.nvim_buf_get_lines(buf_or_lines, 0, -1, false)
     local messages = {}; local role = nil; local acc = {}
 
     local function flush()

@@ -174,7 +174,7 @@ function M.SendFromPopup()
     api.nvim_buf_set_lines(buf, -1, -1, false, { "", sending_msg })
 
     local history_lines = api.nvim_buf_get_lines(buf, 0, start_idx, false)
-    local history_text = table.concat(history_lines, "\n")
+    local messages = require('multi_context.conversation').build_history(history_lines)
     
     local system_prompt = "Você é um Engenheiro de Software Autônomo no Neovim."
     local memory_context = get_context_md_content()
@@ -183,8 +183,8 @@ function M.SendFromPopup()
     end
     if active_agent_prompt ~= "" then system_prompt = system_prompt .. "\n\n" .. active_agent_prompt end
     
-    local full_user_content = (history_text ~= "" and history_text .. "\n\n" or "") .. user_prefix .. " " .. text_to_send
-    local messages = { { role = "system", content = system_prompt }, { role = "user", content = full_user_content } }
+    table.insert(messages, 1, { role = "system", content = system_prompt })
+    table.insert(messages, { role = "user", content = text_to_send })
 
     local response_started = false
     local current_ia_start_idx = nil
@@ -219,8 +219,12 @@ function M.SendFromPopup()
                 end
             end
         end,
-        function(api_entry)
+        function(api_entry, metrics)
             if not response_started then remove_sending_msg() end
+            
+            if metrics and (metrics.cache_read_input_tokens or 0) > 0 then
+                vim.notify(string.format("⚡ Prompt Caching: %d tokens economizados!", metrics.cache_read_input_tokens), vim.log.levels.INFO)
+            end
             
             local b_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
             local has_tool = false

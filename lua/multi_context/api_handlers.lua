@@ -43,13 +43,12 @@ end
 
 local function write_payload_to_tmp(payload)
     local tmp_file = os.tmpname()
-    table.insert(_G.MultiContextTempFiles, tmp_file) -- Registra para limpeza
+    table.insert(_G.MultiContextTempFiles, tmp_file)
     local f = io.open(tmp_file, "w")
     if f then f:write(vim.fn.json_encode(payload)); f:close() end
     return tmp_file
 end
 
--- Limpa temporários criados em chamadas que deram crash
 local function remove_tmp(file)
     os.remove(file)
     for i, f in ipairs(_G.MultiContextTempFiles) do
@@ -96,11 +95,14 @@ M.gemini = {
 M.openai = {
     make_request = function(api_config, messages, api_keys, _, callback)
         local api_key = api_keys[api_config.name] or ""
-        local tmp_file = write_payload_to_tmp({ model = api_config.model, messages = messages, stream = true })
+        -- Injeção do stream_options para capturar métricas de cache (OpenAI / DeepSeek)
+        local payload = { model = api_config.model, messages = messages, stream = true, stream_options = { include_usage = true } }
+        local tmp_file = write_payload_to_tmp(payload)
         local cmd = { "curl", "-s", "-N", "-L", "-X", "POST", api_config.url }
         for _, h in ipairs(header_args(api_config, api_key)) do table.insert(cmd, h) end
         table.insert(cmd, "-d"); table.insert(cmd, "@" .. tmp_file)
         local full_response = ""
+        local metrics = nil
         vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
                 if not data then return end
@@ -108,7 +110,16 @@ M.openai = {
                     full_response = full_response .. line .. "\n"
                     if line:match("^data: ") and not line:match("%[DONE%]") then
                         local ok, dec = pcall(vim.fn.json_decode, line:sub(7))
-                        if ok and dec.choices and dec.choices[1].delta and dec.choices[1].delta.content then callback(dec.choices[1].delta.content, nil, false) end
+                        if ok then
+                            if dec.choices and dec.choices[1] and dec.choices[1].delta and dec.choices[1].delta.content then
+                                callback(dec.choices[1].delta.content, nil, false)
+                            end
+                            if dec.usage then
+                                metrics = metrics or {}
+                                -- Suporta tanto o padrao OpenAI quanto o DeepSeek
+                                metrics.cache_read_input_tokens = (dec.usage.prompt_tokens_details and dec.usage.prompt_tokens_details.cached_tokens) or dec.usage.prompt_cache_hit_tokens or 0
+                            end
+                        end
                     end
                 end
             end,
@@ -118,8 +129,73 @@ M.openai = {
                     local ok, dec = pcall(vim.fn.json_decode, full_response)
                     if ok and dec.error and dec.error.message then callback("\n\n**[ERRO OPENAI]:** " .. dec.error.message .. "\n", nil, false) end
                 end
-                callback(nil, nil, true) 
+                callback(nil, nil, true, metrics) 
             end,
+        })
+    end,
+}
+
+M.anthropic = {
+    make_request = function(api_config, messages, api_keys, _, callback)
+        local api_key = api_keys[api_config.name] or ""
+        local system_text = ""
+        local anthropic_msgs = {}
+        for _, msg in ipairs(messages) do
+            if msg.role == "system" then
+                system_text = system_text .. msg.content .. "\n"
+            else
+                table.insert(anthropic_msgs, {role = msg.role, content = msg.content})
+            end
+        end
+        local payload = {
+            model = api_config.model,
+            messages = anthropic_msgs,
+            system = {
+                -- AQUI ESTÁ A MÁGICA: O cache_control inserido no último bloco do system_prompt
+                { type = "text", text = vim.trim(system_text), cache_control = { type = "ephemeral" } }
+            },
+            stream = true,
+            max_tokens = 4096
+        }
+        local tmp_file = write_payload_to_tmp(payload)
+        local cmd = {
+            "curl", "-s", "-N", "-L", "-X", "POST", api_config.url,
+            "-H", "x-api-key: " .. api_key,
+            "-H", "anthropic-version: 2023-06-01",
+            "-H", "anthropic-beta: prompt-caching-2024-07-31",
+            "-H", "content-type: application/json",
+            "-d", "@" .. tmp_file
+        }
+        local full_response = ""
+        local metrics = nil
+        vim.fn.jobstart(cmd, {
+            on_stdout = function(_, data)
+                if not data then return end
+                for _, line in ipairs(data) do
+                    full_response = full_response .. line .. "\n"
+                    if line:match("^data: ") then
+                        local ok, dec = pcall(vim.fn.json_decode, line:sub(7))
+                        if ok then
+                            if dec.type == "content_block_delta" and dec.delta and dec.delta.text then
+                                callback(dec.delta.text, nil, false)
+                            elseif dec.type == "message_start" and dec.message and dec.message.usage then
+                                metrics = metrics or {}
+                                metrics.cache_read_input_tokens = dec.message.usage.cache_read_input_tokens or 0
+                            end
+                        end
+                    end
+                end
+            end,
+            on_exit = function()
+                remove_tmp(tmp_file)
+                if full_response:match('"error"') and not full_response:match('"type": "message_start"') then
+                    local ok, dec = pcall(vim.fn.json_decode, full_response)
+                    if ok and dec.error and dec.error.message then
+                        callback("\n\n**[ERRO ANTHROPIC]:** " .. dec.error.message .. "\n", nil, false)
+                    end
+                end
+                callback(nil, nil, true, metrics)
+            end
         })
     end,
 }
@@ -142,4 +218,5 @@ M.cloudflare = {
         })
     end,
 }
+
 return M

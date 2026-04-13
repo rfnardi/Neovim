@@ -63,11 +63,11 @@ M.execute = function(messages, on_chunk, on_done, on_error)
             try(idx + 1)
             return
         end
-        handler.make_request(entry, messages, api_keys, nil, function(chunk, err, done)
+        handler.make_request(entry, messages, api_keys, nil, function(chunk, err, done, metrics)
             vim.schedule(function()
                 if err   then try(idx + 1); return end
                 if chunk then on_chunk(chunk, entry) end
-                if done  then on_done(entry) end
+                if done  then on_done(entry, metrics) end
             end)
         end)
     end
