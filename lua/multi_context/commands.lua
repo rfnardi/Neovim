@@ -55,4 +55,23 @@ M.ContextBuffers  = function()
     open_with(require('multi_context.context_builders').get_all_buffers_content())
 end
 
+M.TogglePopup = function()
+    local popup = require('multi_context.ui.popup')
+
+    -- Se a janela já está aberta na tela, nós a escondemos e saímos
+    if popup.popup_win and vim.api.nvim_win_is_valid(popup.popup_win) then
+        vim.api.nvim_win_hide(popup.popup_win)
+        vim.cmd("stopinsert")
+        return
+    end
+
+    -- Se a janela está escondida, mas o buffer da conversa ainda existe na memória, reabre ele
+    if popup.popup_buf and vim.api.nvim_buf_is_valid(popup.popup_buf) then
+        open_with(popup.popup_buf)
+    else
+        -- Se for a primeira vez abrindo na sessão, inicia vazio
+        open_with("")
+    end
+end
+
 return M
