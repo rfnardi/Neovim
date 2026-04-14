@@ -1,6 +1,6 @@
 {
-  "default_api": "groq",
-  "fallback_mode": false,
+  "default_api": "modal-zai_GLM-5",
+  "fallback_mode": true,
   "apis": [
     {
       "headers": {
@@ -126,11 +126,35 @@
         "Content-Type": "application/json",
         "Authorization": "Bearer {API_KEY}"
       },
+      "url": "https://api.us-west-2.modal.direct/v1/chat/completions",
+      "name": "modal-zai_GLM-5",
+      "model": "zai-org/GLM-5.1-FP8",
+      "num_tries": 1,
+      "include_in_fall-back_mode": true,
+      "api_type": "openai"
+    },
+    {
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {API_KEY}"
+      },
       "url": "https://api.groq.com/openai/v1/chat/completions",
-      "name": "groq",
+      "name": "groq1",
       "model": "openai/gpt-oss-120b",
       "num_tries": 1,
-      "include_in_fall-back_mode": false,
+      "include_in_fall-back_mode": true,
+      "api_type": "openai"
+    },
+    {
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {API_KEY}"
+      },
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "name": "groq2",
+      "model": "openai/gpt-oss-120b",
+      "num_tries": 1,
+      "include_in_fall-back_mode": true,
       "api_type": "openai"
     },
     {

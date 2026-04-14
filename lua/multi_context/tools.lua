@@ -113,4 +113,75 @@ M.replace_lines = function(path, start_line, end_line, content)
     return "SUCESSO: Edição nas linhas " .. start_line .. " a " .. end_line
 end
 
+M.get_diagnostics = function(path)
+    -- 1. Exige explicitamente o caminho do arquivo
+    if not path or path == "" or path == "nil" then
+        return "ERRO: O atributo 'path' é OBRIGATÓRIO. Ex: <tool_call name=\"get_diagnostics\" path=\"caminho/do/arquivo.lua\"></tool_call>"
+    end
+
+    -- 2. Resolve o caminho e carrega o buffer
+    path = vim.trim(path)
+    local full_path = resolve_path(path)
+    if not full_path then return "ERRO: 'path' inválido." end
+    
+    local bufnr = vim.fn.bufnr(full_path)
+    if bufnr == -1 then
+        if vim.fn.filereadable(full_path) == 0 then
+            return "ERRO: Arquivo não encontrado: " .. full_path
+        end
+        bufnr = vim.fn.bufadd(full_path)
+        if bufnr == 0 then return "ERRO: Não foi possível carregar o arquivo: " .. full_path end
+        vim.fn.bufload(bufnr)
+    end
+
+    -- 3. Verifica presença de LSP ativo
+    local has_lsp = vim.lsp.buf_is_attached and vim.lsp.buf_is_attached(bufnr)
+    if not has_lsp then
+        local clients = vim.lsp.get_clients and vim.lsp.get_clients({bufnr = bufnr}) or {}
+        has_lsp = #clients > 0
+    end
+
+    if has_lsp then
+        -- Aguarda o LSP recalcular diagnósticos (até 2s)
+        vim.wait(2000, function() return false end, 50)
+        vim.wait(300)
+    end
+
+    -- 4. Coleta diagnósticos
+    local diagnostics = vim.diagnostic.get(bufnr)
+    if not diagnostics or #diagnostics == 0 then
+        if not has_lsp then
+            return "AVISO: Nenhum servidor LSP ativo detectado para: " .. full_path
+        end
+        return "✅ Nenhum diagnóstico ou erro encontrado em: " .. full_path
+    end
+
+    -- 5. Formata e Trunca a resposta para proteger a janela de contexto
+    local MAX_DIAGS = 50
+    local MAX_BYTES = 3000
+    local severity_names = { [1] = "ERROR", [2] = "WARN", [3] = "INFO", [4] = "HINT" }
+    local out_lines = {}
+    local count = math.min(#diagnostics, MAX_DIAGS)
+
+    for i = 1, count do
+        local d = diagnostics[i]
+        local sev = severity_names[d.severity] or "?"
+        local msg = d.message or ""
+        local lnum = (d.lnum or 0) + 1
+        local col = (d.col or 0) + 1
+        local source = d.source or ""
+        table.insert(out_lines, string.format("L%d:C%d [%s] %s%s", lnum, col, sev, msg, source ~= "" and (" ("..source..")") or ""))
+    end
+
+    local result = "Diagnósticos para " .. full_path .. ":\n" .. table.concat(out_lines, "\n")
+
+    if #result > MAX_BYTES then
+        result = result:sub(1, MAX_BYTES) .. "\n\n[AVISO: TRUNCADO - " .. #diagnostics .. " diagnósticos no total, exibindo " .. count .. "]"
+    elseif #diagnostics > MAX_DIAGS then
+        result = result .. "\n\n[AVISO: " .. #diagnostics .. " diagnósticos no total, exibindo os primeiros " .. MAX_DIAGS .. "]"
+    end
+
+    return result
+end
+
 return M

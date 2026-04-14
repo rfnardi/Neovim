@@ -1,253 +1,206 @@
-
 # MultiContext AI - Neovim Plugin
 
 ## 📖 Visão Geral
-**MultiContext AI** é um plugin nativo para Neovim que integra assistentes de IA autônomos diretamente no editor. Ele permite que desenvolvedores interajam com múltiplos agentes especializados — **Documentador**, **Arquiteto**, **Engenheiro** e **QA** — via uma interface de chat, com acesso ao sistema de arquivos, terminal e controle de versões.
+**MultiContext AI** é um plugin nativo para Neovim que integra assistentes de IA **autônomos** diretamente no editor (inspirado no paradigma do *Claude Code* e *Devin*). Ele permite que desenvolvedores interajam com múltiplos agentes especializados — **Arquiteto**, **Coder**, **Engenheiro de Prompt** e **Inspetor** — via uma interface de chat nativa, concedendo a eles acesso direto ao sistema de arquivos, terminal, análise de código e leitura de diagnósticos LSP.
 
-> **Objetivo:** acelerar o fluxo de trabalho de desenvolvimento, automatizando tarefas repetitivas (geração de código, documentação, testes) e fornecendo suporte contextual em tempo real.
+> **Objetivo:** Acelerar o fluxo de trabalho de desenvolvimento automatizando tarefas repetitivas e complexas. A IA não apenas "sugere" código, ela navega, lê, analisa erros do LSP, edita arquivos em background e testa, usando um motor de raciocínio ReAct.
 
 ---
 
 ## 🚀 Funcionalidades
 
-| ✅ | Funcionalidade |
-|---|----------------|
-| **Agentes Especializados** | Documentador, Arquiteto, Engenheiro, QA |
-| **Chat Inteligente** | Popup nativo com realce de sintaxe por papel |
-| **Suporte a Múltiplos Contextos** | Arquivo, seleção, pasta, repositório Git |
-| **Ferramentas Autônomas** | `list_files`, `read_file`, `edit_file`, `replace_lines`, `search_code`, `run_shell` |
-| **Memória de Longo Prazo** | `CONTEXT.md` persiste decisões e progresso |
-| **Segurança Integrada** | Validação de comandos críticos, limites de iteração, confirmações manuais |
-| **Persistência de Conversa** | Histórico salvo entre sessões |
-| **Extensibilidade** | Arquitetura modular, futuro suporte a plugins de agentes |
-| **Assíncrono e Leve** | Operações de IA via HTTP não bloqueantes (libuv) |
+| ✅ | Funcionalidade | Descrição |
+|:---:|---|---|
+| 🤖 | **Agentes Especializados** | Personas persistentes (`@arquiteto`, `@coder`) com instruções em JSON. |
+| 🔄 | **Loop Autônomo (ReAct)** | Agentes encadeiam ações sozinhos (flag `--auto`) com limite de segurança de 15 iterações. |
+| ⚡ | **Prompt Caching Nativo** | Cache de contexto para Anthropic, OpenAI e DeepSeek. Economiza até 90% dos tokens! |
+| 🔍 | **Integração LSP** | A IA lê erros/warnings do Neovim em tempo real via `vim.diagnostic`. |
+| 🧠 | **Memória de Longo Prazo** | O arquivo `CONTEXT.md` atualiza e persiste as decisões de arquitetura do projeto. |
+| 🛠️ | **Ferramentas de Sistema** | `read_file`, `edit_file`, `replace_lines`, `search_code`, `run_shell`, `get_diagnostics` |
+| 🗑️ | **Garbage Collection Ativa** | Ferramenta `rewrite_chat_buffer` destrói logs velhos e resume o chat para salvar memória. |
+| 🛡️ | **Segurança Integrada** | Validação de comandos Bash críticos, confirmações manuais e isolamento de parser XML. |
+| 📂 | **Isolamento de Workspaces** | Histórico salvo automaticamente em `.mctx_chats/` na raiz do repositório Git. |
+| 🚀 | **Assíncrono e Leve** | Operações HTTP via `jobstart` não bloqueantes, sem travar a interface do Neovim. |
 
 ---
 
 ## 📦 Instalação
 
-### 1. Usando **vim-plug**
-```vim
-Plug 'seu-usuario/multi_context'
-```
+### Requisitos
+- **Neovim 0.8+** (Necessário para a API de diagnósticos `vim.diagnostic` e janelas flutuantes).
+- `curl` instalado no sistema (para as requisições HTTP).
+- `git` e `tree` (para extração de contexto de repositório e busca nativa).
 
-### 2. Usando **packer.nvim**
-```lua
-use { 'seu-usuario/multi_context', run = ':lua require("multi_context").setup()' }
-```
-
-### 3. Usando **lazy.nvim**
+### 1. Usando **lazy.nvim** (Recomendado)
 ```lua
 {
-  'seu-usuario/multi_context',
+  'seu-usuario/multi_context.nvim',
   config = function()
-    require('multi_context').setup()
+    require('multi_context').setup({
+      user_name = "SeuNome",
+      appearance = { border = "rounded", width = 0.7, height = 0.7 }
+    })
   end,
 }
 ```
 
-> **Recomendação:** reinicie o Neovim após a instalação e execute `:PlugInstall` (ou o comando equivalente do seu gerenciador).
+### 2. Usando **packer.nvim**
+```lua
+use { 'seu-usuario/multi_context.nvim', config = function() require("multi_context").setup() end }
+```
 
-### Dependências externas
-| Ferramenta | Motivo |
-|------------|--------|
-| `jq` | Formatação e manipulação de JSON (opcional) |
-| `python3` | Algumas APIs de provedores podem precisar de scripts auxiliares |
-| `curl` ou **luasocket** (incluído) | Comunicação HTTP com provedores de IA |
-| `git` | Integração com repositórios Git para contexto de código |
-
-Instale via seu gerenciador de pacotes, por exemplo:
-
-```bash
-# Debian/Ubuntu
-sudo apt-get install jq python3 curl git
-
-# macOS (Homebrew)
-brew install jq python3 curl git
+### 3. Usando **vim-plug**
+```vim
+Plug 'seu-usuario/multi_context.nvim'
 ```
 
 ---
 
 ## ⚙️ Configuração
 
-Crie (ou edite) `lua/multi_context/config.lua` ou configure diretamente no `init.lua`:
+O MultiContext divide as configurações entre aparência (Lua) e credenciais de APIs (JSON).
 
+**1. Configuração visual (`init.lua`):**
 ```lua
 require('multi_context').setup({
-  api_key = os.getenv('MULTICONTEXT_API_KEY'),   -- chave da API (DeepSeek, Claude, etc.)
-  default_agent = 'engineer',                  -- agente padrão ao abrir o chat
-  log_level = 'info',                          -- níveis: trace, debug, info, warn, error
-  allowed_commands = {                         -- lista branca de comandos críticos
-    'git', 'make', 'npm', 'yarn', 'cargo',
-  },
-  prohibited_patterns = {                      -- regexes de comandos bloqueados
-    'rm%-rf', 'sudo', 'dd', 'mkfs', 'shutdown', 'reboot',
-  },
+  user_name = "Nardi",                           -- Seu nome no chat
+  config_path = "~/.config/nvim/context_apis.json",  -- Caminho do JSON de APIs
+  api_keys_path = "~/.config/nvim/api_keys.json",    -- Caminho seguro das chaves
 })
 ```
 
-### Variáveis de ambiente úteis
-| Variável | Uso |
-|----------|-----|
-| `MULTICONTEXT_API_KEY` | Chave de API padrão (pode ser sobrescrita em `setup`) |
-| `MULTICONTEXT_LOG_LEVEL` | Override do nível de log (`debug`, `info`, etc.) |
-| `MULTICONTEXT_CONTEXT_PATH` | Diretório onde `CONTEXT.md` será criado (padrão: raiz do projeto) |
+**2. Gerenciamento de Chaves (`api_keys.json`):**
+Mantenha este arquivo seguro. Ele vincula o nome da API à sua chave real.
+```json
+{
+  "OpenAI": "sk-proj-...",
+  "Claude": "sk-ant-...",
+  "DeepSeek": "sk-..."
+}
+```
+
+**3. Gerenciamento de Provedores (`context_apis.json`):**
+Use o comando `:ContextApis` dentro do Neovim para abrir o menu flutuante e trocar de IA rapidamente.
 
 ---
 
-## 🎮 Uso Básico
+## 🎮 Uso Básico e Comandos
 
-| Atalho | Ação |
-|--------|------|
-| `<A-c>` | Abre o chat de contexto (usa linha ou seleção atual) |
-| `<A-h>` | Alterna visibilidade do popup de chat |
-| `<A-w>` | Exibe/oculta a visualização de workspace |
-| `<A-f>` | Fuzzy finder de arquivos (integrado ao plugin) |
-| `<A-b>` | Lista de buffers abertos |
-| `<A-d>` | Abre a interface de banco de dados (`DBUI`) |
+O plugin expõe vários comandos para iniciar o chat já com o contexto injetado:
 
-### Exemplo de fluxo rápido
+| Comando | Ação |
+|---|---|
+| `:ContextChatFull` | Abre o chat de IA vazio ou retoma o workspace atual. |
+| `:'<,'>Context` | Envia a seleção visual de código para o chat. |
+| `:ContextFolder` | Inicia com a leitura de todos os arquivos da pasta atual. |
+| `:ContextRepo` | Inicia fazendo parsing de todo o projeto Git rastreado. |
+| `:ContextGit` | Inicia com as alterações não commitadas (`git diff`). |
+| `:ContextBuffers`| Inicia com o texto de todos os buffers abertos no momento. |
+| `:ContextTree` | Inicia desenhando a árvore de diretórios no prompt. |
+| `:ContextUndo` | Restaura o chat após uma compressão de histórico malsucedida da IA. |
 
-1. **Inicie o chat**: pressione `<A-c>`.
-2. **Selecione o agente** (ex.: `:Agent engineer` ou escreva `@engineer` no prompt).
-3. **Peça ao agente**:  
+### Exemplo de Fluxo Autônomo
+
+1. Abra o chat com `:ContextChatFull`.
+2. Chame o agente especialista e adicione a tag `--auto`:
+   ```text
+   ## Nardi >> @coder --auto verifique os erros do LSP neste arquivo e corrija a função de login.
    ```
-   @engineer --auto implemente uma função Lua que leia todas as linhas de um buffer e retorne a contagem de linhas não vazias.
-   ```
-4. O agente usará `run_shell`/`edit_file` conforme necessário e retornará o código pronto.
-5. **Persistência**: a conversa e as decisões são salvas automaticamente em `CONTEXT.md`.
+3. A IA usará o `get_diagnostics` para ver os erros, o `replace_lines` para consertar o código, e devolverá a resposta final. Tudo isso acontecerá no background.
 
 ---
 
-## 🔐 Segurança
+## 🔐 Segurança e Arquitetura do ReAct
 
-- **Validação de comandos**: antes de executar, o plugin verifica se o comando corresponde a padrões proibidos (`rm -rf`, `sudo`, etc.).  
-- **Lista branca**: comandos permitidos podem ser configurados via `allowed_commands`.  
-- **Limite de iterações**: agentes autônomos são limitados a 15 iterações por tarefa para evitar loops infinitos.  
-- **Confirmação manual**: para operações de risco (ex.: remoção de arquivos), o usuário recebe um prompt de confirmação.  
-- **Logs de auditoria**: todos os comandos executados são registrados em `~/.local/share/multi_context/audit.log` (pode ser desativado via `log_audit = false`).
+Para evitar desastres de código e alucinações perigosas, o plugin possui múltiplas camadas de defesa:
+- **Blindagem XML**: As tags enviadas pela IA (`<tool_call>`) são validadas através de um parser iterativo seguro (imune a *Dogfooding* e escapes markdown).
+- **Lista Branca (Whitelist)**: Comandos do terminal são interceptados. Padrões destrutivos como `rm -rf`, `mkfs`, `chown` e `sudo` exigem confirmação manual rígida (`[Y/n]`) na UI, mesmo no modo `--auto`.
+- **Circuit Breaker**: Agentes autônomos são interrompidos forçadamente na 15ª iteração para evitar loops infinitos e estouro de faturamento da API.
+- **Proteção OOM**: Binários e arquivos maiores que 100KB são silenciados das ferramentas de leitura automaticamente para não estourar a memória RAM e o limite de tokens.
 
 ---
 
 ## 📂 Memória de Longo Prazo – `CONTEXT.md`
 
-- **Localização:** criado na raiz do projeto (`<project_root>/CONTEXT.md`).  
-- **Formato:** Markdown estruturado em seções (`## Decisões Técnicas`, `## Progresso`, `## Issues`).  
-- **Atualização automática:** após cada tarefa concluída, o agente escreve um resumo no arquivo.  
-- **Reset/Export:**  
-  ```vim
-  :MultiContextResetContext   " Apaga o CONTEXT.md atual
-  :MultiContextExportContext <caminho>   " Exporta para outro arquivo
-  ```
-
-> **Importante:** versionar `CONTEXT.md` no repositório permite rastrear decisões ao longo do tempo.
+O plugin utiliza a raiz do seu projeto como "Cérebro" compartilhado pela equipe de agentes:
+- **Localização:** Criado automaticamente na raiz do Git (`<project_root>/CONTEXT.md`).  
+- **Auto-Atualização:** Ao final de *features* ou refatorações, o `@arquiteto` atualiza este arquivo para não esquecer as regras no futuro.
+- **Prompt Caching:** Este arquivo é lido de forma invisível e enviado nos headers de sistema. Usando *Anthropic* ou *DeepSeek*, o conteúdo inteiro é cacheado no servidor, acelerando respostas em 200%.
 
 ---
 
 ## 🏗️ Arquitetura Interna
 
-```
+```text
 Usuário
+   │ (Chat / Workspace .mctx)
+   ▼
+init.lua (Motor ReAct & Parser XML) ──► conversation.lua (Gerencia o Buffer)
    │
    ▼
-UI Popup (ui/popup.lua) ──► conversation.lua
-   │                           │
-   ▼                           ▼
-api_selector.lua          tools.lua (list_files, run_shell, …)
-   │                           │
-   ▼                           ▼
-api_client.lua ──► Provedor de IA (DeepSeek, Claude, …)
-   │
-   ▼
-Resposta ──► conversation.lua ──► UI Popup
+api_client.lua  ──►  api_handlers.lua (OpenAI, Gemini, Anthropic)
+   │                       │ (Tratamento de Stream, JSON, Temp Files GC)
+   ▼                       ▼
+tools.lua ◄────────── Resposta (tool_call)
+(list_files, read_file, get_diagnostics, run_shell...)
 ```
 
-- **Módulos principais**
-  - `init.lua` – ponto de entrada, registra comandos.
-  - `config.lua` – leitura e validação das configurações.
-  - `agents.lua` – definição e carregamento dos agentes (arquivo `agents/agents.json`).
-  - `api_client.lua` – camada HTTP assíncrona (libuv).
-  - `tools.lua` – wrappers seguros para operações de sistema.
-  - `queue_editor.lua` – gerenciamento de fila de tarefas autônomas.
-- **Assíncronismo:** todas as chamadas de rede usam `vim.loop` (`uv`) para não bloquear a UI.
-- **Limite de iteração:** implementado em `queue_editor.lua` (contagem de ciclos).
+- **Assíncronismo:** Chamadas baseadas em `vim.fn.jobstart` (libuv) com *temp files* limpos em Garbage Collection na saída do buffer (`VimLeavePre`).
+- **Configuração Profunda:** Extensão via `vim.tbl_deep_extend`.
 
 ---
 
 ## 🧪 Testes & Qualidade
 
-- **Framework:** `busted` (Lua) + `luassert`.
+- **Framework:** `plenary.nvim` (busted wrapper) + `luassert`.
 - **Executar testes:**  
   ```bash
-  busted tests/
+  make test  # Ou rode arquivos via PlenaryBustedFile
   ```
-- **CI:** GitHub Actions configurado (`.github/workflows/ci.yml`) executa lint, testes e verifica cobertura com `luacov`.
-- **Lint/Format:** `stylua` para formatação e `luacheck` para lint.
+- Todas as funções de I/O, *parsers* e handlers de API contêm testes automatizados que realizam Mock da API do Neovim.
 
 ---
 
-## 🤝 Contribuição
+## 🌐 Provedores de IA Suportados Nativamente
 
-1. Fork o repositório.
-2. Crie uma branch para sua feature (`git checkout -b feature/nome`).
-3. Siga o padrão de código (`stylua`, `luacheck`).
-4. Escreva testes para a nova funcionalidade.
-5. Abra um Pull Request descrevendo a mudança.
-
-- **Guia completo:** veja `CONTRIBUTING.md`.
-- **Código de Conduta:** `CODE_OF_CONDUCT.md`.
-- **Licença:** MIT (arquivo `LICENSE` incluído).
+| Provedor | Modelos recomendados | Prompt Caching | Suporte a Tool/ReAct |
+|----------|----------------------|:---:|:---:|
+| **Anthropic** | `claude-3-5-sonnet` | ✅ | ✅ |
+| **OpenAI** | `gpt-4o`, `o1` | ✅ | ✅ |
+| **DeepSeek** | `deepseek-coder` | ✅ | ✅ |
+| **Google** | `gemini-3.1-pro` | ❌ | ✅ |
+| **Cloudflare** | Modelos Worker AI | ❌ | ⚠️ (Básico) |
 
 ---
 
 ## 📅 Roadmap
 
-| Versão | Marco | Data Estimada |
-|--------|-------|----------------|
-| **v0.2** | Sistema de plugins para agentes | Q3 2026 |
-| **v0.3** | Cache inteligente de respostas | Q4 2026 |
-| **v0.4** | Integração LSP avançada | Q1 2027 |
-| **v1.0** | Dashboard de status, exportação de conversas, UI web opcional | Q2 2027 |
-
-### Métricas de desempenho
-- **Latência média de resposta IA:** < 300 ms (dependendo do provedor).  
-- **Uso de memória:** < 30 MiB durante conversas típicas.  
+| Versão | Marco | Status |
+|--------|-------|:---:|
+| **v0.1** | Interface de Popup, Parsing Básico e Histórico | ✅ |
+| **v0.2** | Sistema de Agentes e Ferramentas I/O (File/Shell) | ✅ |
+| **v0.3** | Motor Autônomo ReAct e Prompt Caching Nativo | ✅ |
+| **v0.4** | Integração LSP (Autocorreção Inteligente) | ✅ |
+| **v1.0** | Download e compartilhamento de Agentes Externos via GitHub | 🔄 Planejado |
 
 ---
 
-## 🌐 Provedores de IA Suportados
+## 🤝 Contribuição
 
-| Provedor | Modelos Disponíveis | Limites de taxa* | Parâmetros configuráveis |
-|----------|---------------------|------------------|---------------------------|
-| **DeepSeek Chat** | `deepseek-chat` | 60 req/min | `temperature`, `max_tokens` |
-| **DeepSeek Coder** | `deepseek-coder` | 30 req/min | `temperature`, `top_p` |
-| **Claude 3 Haiku** | `claude-3-haiku-20240307` | 20 req/min | `temperature`, `max_tokens` |
-
-\*Limites dependem da conta do usuário; verifique a documentação do provedor.
-
-- **Alternância dinâmica:**  
-  ```vim
-  :MultiContextSetProvider deepseek_chat
-  ```
+1. Faça um Fork do repositório.
+2. Crie uma branch para sua feature (`git checkout -b feature/minha-feature`).
+3. Siga o padrão de código e certifique-se de não quebrar as regras de *parsing* XML no `init.lua`.
+4. Escreva testes para a nova funcionalidade (`/tests`).
+5. Abra um Pull Request!
 
 ---
 
 ## 🌍 Internacionalização
 
-O plugin está preparado para suportar múltiplos idiomas via arquivos de tradução (`lua/multi_context/i18n/*.lua`). O README está em português, mas pode ser traduzido para:
-
+O plugin foi desenhado para escalabilidade global. O README padrão está em português para os desenvolvedores base, mas estão previstos arquivos de localização:
 - **English** (`README.en.md`)
 - **Español** (`README.es.md`)
-
-Contribua com novas traduções adicionando um arquivo correspondente e atualizando o índice no `README.md`.
-
----
 
 ## 📜 Licença
 
 Este projeto está licenciado sob a **MIT License** – veja o arquivo `LICENSE` para detalhes.
-
----
-
-*Última atualização: 2026-04-12*  
-

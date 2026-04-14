@@ -111,13 +111,13 @@ M.openai = {
                     if line:match("^data: ") and not line:match("%[DONE%]") then
                         local ok, dec = pcall(vim.fn.json_decode, line:sub(7))
                         if ok then
-                            if dec.choices and dec.choices[1] and dec.choices[1].delta and dec.choices[1].delta.content then
+                            if dec.choices and dec.choices[1] and dec.choices[1].delta and type(dec.choices[1].delta.content) == "string" then
                                 callback(dec.choices[1].delta.content, nil, false)
                             end
-                            if dec.usage then
+                            if type(dec.usage) == "table" then
                                 metrics = metrics or {}
                                 -- Suporta tanto o padrao OpenAI quanto o DeepSeek
-                                metrics.cache_read_input_tokens = (dec.usage.prompt_tokens_details and dec.usage.prompt_tokens_details.cached_tokens) or dec.usage.prompt_cache_hit_tokens or 0
+                                metrics.cache_read_input_tokens = (type(dec.usage.prompt_tokens_details) == "table" and dec.usage.prompt_tokens_details.cached_tokens) or dec.usage.prompt_cache_hit_tokens or 0
                             end
                         end
                     end
@@ -178,7 +178,7 @@ M.anthropic = {
                         if ok then
                             if dec.type == "content_block_delta" and dec.delta and dec.delta.text then
                                 callback(dec.delta.text, nil, false)
-                            elseif dec.type == "message_start" and dec.message and dec.message.usage then
+                            elseif dec.type == "message_start" and type(dec.message) == "table" and type(dec.message.usage) == "table" then
                                 metrics = metrics or {}
                                 metrics.cache_read_input_tokens = dec.message.usage.cache_read_input_tokens or 0
                             end

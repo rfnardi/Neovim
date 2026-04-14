@@ -3,11 +3,18 @@ local M   = {}
 
 M.popup_buf = nil
 M.popup_win = nil
+M.code_buf_before_popup = nil
 
 function M.create_popup(initial_content_or_bufnr)
+    -- RASTREAMENTO: Salva o buffer de código ativo antes do popup roubar o foco
+    if not (M.popup_win and api.nvim_win_is_valid(M.popup_win)) then
+        local cur = api.nvim_get_current_buf()
+        if vim.bo[cur].buftype == "" then
+            M.code_buf_before_popup = cur
+        end
+    end
+
     if M.popup_win and api.nvim_win_is_valid(M.popup_win) then
-        api.nvim_set_current_win(M.popup_win)
-        return M.popup_buf, M.popup_win
     end
 
     local config = require('multi_context.config')

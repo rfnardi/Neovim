@@ -24,7 +24,7 @@ lua/multi_context/
 ├── conversation.lua      # Motor de reconstrução de histórico
 ├── context_builders.lua  # Extratores de contexto com proteção contra OOM (>100kb/Binários)
 ├── queue_editor.lua      # Editor visual de fila de tarefas
-├── tools.lua             # Ferramentas do sistema (leitura, edição cirúrgica, bash, git grep)
+├── tools.lua             # Ferramentas do sistema (leitura, edição cirúrgica, bash, git grep, diagnósticos LSP)
 ├── utils.lua             # Utilitários e exportação isolada de Workspace (.mctx_chats)
 ├── ui/                   # Interface gráfica e Highlights customizados
 └── tests/                # Suíte de testes automatizados (TDD/Plenary)
@@ -55,23 +55,42 @@ lua/multi_context/
 - Leitura silenciosa deste arquivo (`CONTEXT.md`) injetada no `system_prompt` para manter a equipe de IA ciente do escopo global.
 - **Otimização de Custos**: Implementação nativa de Prompt Caching (Anthropic, OpenAI e DeepSeek). A base de conhecimento do projeto e o manual de ferramentas são cacheados na memória dos servidores da API, reduzindo custos em até 90% e acelerando o *Time-to-First-Token*. O plugin exibe notificações visuais (UI) da economia em milhares de tokens no Neovim.
 
+### 6. Integração LSP — Diagnósticos em Tempo Real 🆕
+- Ferramenta `get_diagnostics` disponível no loop autônomo via `vim.diagnostic.get()`.
+- Permite autocorreção sintática em tempo real: a IA pode ler erros, aplicar fixes e verificar o resultado.
+- Resolve `path -> bufnr` internamente (nunca pede integer ao modelo).
+- Rastreia buffer de código ativo antes do popup abrir (`popup.code_buf_before_popup`).
+- Truncamento agressivo: 50 diagnósticos / 3KB máximo.
+- Sincronização com LSP via `vim.wait` condicional (2s + yield de 300ms).
+- Carregamento automático de arquivos não abertos via `bufadd`+`bufload`.
+- Mensagem informativa quando não há servidor LSP attachado.
+
 ## Decisões Técnicas Críticas (Registro para Agentes)
-1. **Parser de Ferramentas Funcional**: O código abandonou a extração de `<tool_call>` baseada em Regex puro. O novo parser iterativo lida com JSON acidental dentro do XML, limpa crases Markdown e fecha tags esquecidas.
+1. **Parser de Ferramentas Funcional**: O código abandonou a extração baseada em Regex puro. O novo parser iterativo lida com JSON acidental dentro do XML, limpa crases Markdown e fecha tags esquecidas.
 2. **Estrutura de Histórico Estrita**: O envio de prompts agora separa rigorosamente os papéis (`user` -> `assistant`) em arrays JSON, abandonando a concatenação de texto bruto. Essa formatação foi crucial para garantir a compatibilidade do prefixo exato exigido pelo Prompt Caching.
 3. **Deep Merge de Configurações**: O `config.lua` usa `vim.tbl_deep_extend` para mesclar opções do usuário sem sobrescrever as predefinições de UI.
+4. **Integração LSP — get_diagnostics**: Uso de `path` como único atributo (compatível com o parser existente que já extrai `path`). Rastreamento do buffer de código ativo via `popup.code_buf_before_popup` antes do popup roubar o foco. Truncamento agressivo: 50 diagnósticos / 3KB. `vim.wait` com verificação de clientes LSP para sincronização. `bufadd`+`bufload` para arquivos não carregados na sessão. Mensagem informativa quando não há LSP attachado.
 
 ## Estado Atual do Desenvolvimento
 
-### ✅ Concluído (Fases 1 a 11)
+### ✅ Concluído (Fases 1 a 12)
 - Loop autônomo ReAct e interface popup estável.
 - Isolamento de chats por projeto (Workspace Git).
 - Compressão de Contexto e `:ContextUndo`.
 - Otimização de Prompt Caching integrada aos Handlers HTTP.
 - **Suíte de Testes Automatizada** (100% de cobertura nos módulos de I/O, config, string e payload mocking).
+- **Integração LSP — get_diagnostics** (Fase 12 implementada, aguardando validação de testes).
 
 ### 🔄 Planejado / Próximos Passos
-1. **Integração LSP (Foco Atual)**: Criar uma ferramenta para o agente ler diretamente os diagnósticos de erro da linha/buffer atual do Neovim (via `vim.diagnostic.get()`), permitindo autocorreção sintática em tempo real no loop autônomo.
+1. **Integração LSP — Fase 2 (Smart Push)**: Diagnósticos injetados automaticamente no contexto após edições no modo autônomo, sem necessidade da IA pedir explicitamente.
 2. **Sistema de Plugins Externos**: Permitir que usuários definam e baixem agentes predefinidos via repositórios do Github, estendendo o arquivo `agents.json`.
 
 ---
-*Última atualização: 2026-04-13 - Fase 11 (Prompt Caching concluído).*
+*Última atualização: 2026-04-13 - Fase 12 (Integração LSP — get_diagnostics implementada).*
+</arg_value>
+
+
+
+</arg_value>
+
+

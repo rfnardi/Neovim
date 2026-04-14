@@ -1,3 +1,4 @@
+
 local api = vim.api
 local utils = require('multi_context.utils')
 local popup = require('multi_context.ui.popup')
@@ -183,8 +184,13 @@ function M.SendFromPopup()
     end
     if active_agent_prompt ~= "" then system_prompt = system_prompt .. "\n\n" .. active_agent_prompt end
     
-    table.insert(messages, 1, { role = "system", content = system_prompt })
-    table.insert(messages, { role = "user", content = text_to_send })
+		table.insert(messages, 1, { role = "system", content = system_prompt })
+				-- Funde a tarefa atual com o contexto órfão recém carregado (Evita erro Strict User/Assitant)
+				if #messages > 1 and messages[#messages].role == "user" then
+						messages[#messages].content = messages[#messages].content .. "\n\n" .. text_to_send
+				else
+						table.insert(messages, { role = "user", content = text_to_send })
+    end
 
     local response_started = false
     local current_ia_start_idx = nil
@@ -203,11 +209,10 @@ function M.SendFromPopup()
                 local count_before = api.nvim_buf_line_count(buf)
                 api.nvim_buf_set_lines(buf, -1, -1, false, { "", ia_title, "" })
                 
-                -- SALVA O NUMERO DA LINHA EXATA DAQUI PRA FRENTE (1-based index)
                 current_ia_start_idx = count_before + 2
                 response_started = true
             end
-            if chunk and chunk ~= "" then
+            if type(chunk) == "string" and chunk ~= "" then
                 local lines_to_add = vim.split(chunk, "\n", {plain = true})
                 local count = api.nvim_buf_line_count(buf)
                 local last_line = api.nvim_buf_get_lines(buf, count - 1, count, false)[1]
@@ -229,7 +234,6 @@ function M.SendFromPopup()
             local b_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
             local has_tool = false
             
-            -- AGORA ELE LÊ APENAS O TEXTO DESTA ITERAÇÃO (Isolado de fraudes da IA)
             local scan_start = current_ia_start_idx or 1
             for i = scan_start, #b_lines do
                 if b_lines[i]:match("<tool_call") then has_tool = true; break end
@@ -255,7 +259,6 @@ function M.ExecuteTools(ia_idx)
     local last_ia_idx = ia_idx
     
     if not last_ia_idx then
-        -- Fallback seguro para chamadas manuais (Atalho do Teclado)
         last_ia_idx = 0
         for i = #lines, 1, -1 do if lines[i]:match("^## IA %(") then last_ia_idx = i; break end end
         if last_ia_idx == 0 then
@@ -271,6 +274,7 @@ function M.ExecuteTools(ia_idx)
     local new_content = ""; local cursor = 1; local has_changes = false
     local abort_all = false; local approve_all = false
     local pending_rewrite_content = nil
+    local should_continue_loop = false 
 
     local dangerous_commands = {"rm%s+-rf", "mkfs", "sudo ", ">%s*/dev", "chmod ", "chown "}
     local function is_dangerous(cmd)
@@ -279,10 +283,25 @@ function M.ExecuteTools(ia_idx)
         return false
     end
 
+    -- Declarado FORA do loop para evitar erros de escopo do LuaJIT
+    local function get_attr(attrs, n) 
+        if not attrs then return nil end
+        return attrs:match(n .. '%s*=%s*["\']([^"\']+)["\']') 
+    end
+
+    local valid_tools = {
+        list_files = true, read_file = true, search_code = true,
+        edit_file = true, run_shell = true, replace_lines = true,
+        rewrite_chat_buffer = true, get_diagnostics = true
+    }
+
     while cursor <= #content_to_process do
         local tag_start, tag_end = content_to_process:find("<tool_call[^>]*>", cursor)
         if not tag_start then new_content = new_content .. content_to_process:sub(cursor); break end
 
+        local text_before = content_to_process:sub(1, tag_start - 1)
+        local _, tick_count = text_before:gsub("```", "")
+        
         new_content = new_content .. content_to_process:sub(cursor, tag_start - 1)
         local tag_str = content_to_process:sub(tag_start, tag_end)
         local close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
@@ -291,10 +310,21 @@ function M.ExecuteTools(ia_idx)
         if not close_start then inner = content_to_process:sub(tag_end + 1); close_end = #content_to_process
         else inner = content_to_process:sub(tag_end + 1, close_start - 1) end
         
-        local attrs_str = tag_str:sub(11, -2)
-        local function get_attr(n) return attrs_str:match(n .. '%s*=%s*["\']([^"\']+)["\']') end
-        local name = get_attr("name"); local path = get_attr("path"); local query = get_attr("query")
-        local start_line = get_attr("start"); local end_line = get_attr("end")
+        -- Declaração local ANTES do goto para satisfazer o compilador
+        local attrs_str, name, path, query, start_line, end_line, clean_inner
+
+        if tick_count % 2 ~= 0 then
+            new_content = new_content .. tag_str .. inner .. (close_start and "</tool_call>" or "")
+            cursor = close_end + 1
+            goto continue
+        end
+
+        attrs_str = tag_str:sub(11, -2)
+        name = get_attr(attrs_str, "name")
+        path = get_attr(attrs_str, "path")
+        query = get_attr(attrs_str, "query")
+        start_line = get_attr(attrs_str, "start")
+        end_line = get_attr(attrs_str, "end")
 
         if not name or name == "" then
             local ok, json = pcall(vim.fn.json_decode, vim.trim(inner))
@@ -309,12 +339,29 @@ function M.ExecuteTools(ia_idx)
             end
         end
 
-        local clean_inner = inner:gsub("^%s*```[%w_]*\n", ""):gsub("\n%s*```%s*$", "")
+        -- NOVA DEFESA 3: Ignora menções genéricas à tag no meio do texto
+        if not name or name == "" or name == "nil" then
+            new_content = new_content .. tag_str
+            cursor = tag_end + 1
+            goto continue
+        end
+
+        clean_inner = inner:gsub("^%s*```[%w_]*\n", ""):gsub("\n%s*```%s*$", "")
         
         if abort_all then
             new_content = new_content .. tag_str .. clean_inner .. "</tool_call>"; cursor = close_end + 1
         else
             has_changes = true
+
+            if not valid_tools[name] then
+                local err_msg = string.format("Ferramenta '%s' não existe. Consulte o manual de ferramentas.", tostring(name))
+                new_content = new_content .. string.format('<tool_call name="%s">\n%s\n</tool_call>\n\n>[Sistema]: ERRO - %s', tostring(name), clean_inner, err_msg)
+                should_continue_loop = false 
+                M.is_autonomous = false
+                cursor = close_end + 1
+                goto continue
+            end
+
             local choice = 1
             if not approve_all then
                 if M.is_autonomous then
@@ -338,7 +385,7 @@ function M.ExecuteTools(ia_idx)
             local result = ""
             if choice == 2 then
                 result = "Acesso NEGADO pelo usuario."
-                new_content = new_content .. string.format('<tool_rejected name="%s">\n%s\n</tool_rejected>\n\n>[Sistema]: %s', tostring(name), clean_inner, result)
+                new_content = new_content .. string.format('<tool_call name="%s">\n%s\n</tool_call>\n\n>[Sistema]: ERRO - %s', tostring(name), clean_inner, result)
             else
                 local tools = require('multi_context.tools')
                 if name == "rewrite_chat_buffer" then
@@ -348,16 +395,32 @@ function M.ExecuteTools(ia_idx)
                     vim.notify("💾 Backup pré-compressão salvo (use :ContextUndo para reverter)", vim.log.levels.INFO)
                     pending_rewrite_content = clean_inner
                     result = "Buffer reescrito."
-                elseif name == "list_files" then result = tools.list_files()
-                elseif name == "read_file" then result = tools.read_file(path)
-                elseif name == "edit_file" then result = tools.edit_file(path, clean_inner)
-                elseif name == "run_shell" then result = tools.run_shell(clean_inner)
-                elseif name == "search_code" then result = tools.search_code(query)
-                elseif name == "replace_lines" then result = tools.replace_lines(path, start_line, end_line, clean_inner)
-                else result = "Erro: Ferramenta desconhecida." end
+                elseif name == "list_files" then 
+                    should_continue_loop = true
+                    result = tools.list_files()
+                elseif name == "read_file" then 
+                    should_continue_loop = true
+                    result = tools.read_file(path)
+                elseif name == "search_code" then 
+                    should_continue_loop = true
+                    result = tools.search_code(query)
+                elseif name == "edit_file" then 
+                    result = tools.edit_file(path, clean_inner)
+                elseif name == "run_shell" then 
+                    result = tools.run_shell(clean_inner)
+                elseif name == "replace_lines" then 
+                    result = tools.replace_lines(path, start_line, end_line, clean_inner)
+                elseif name == "get_diagnostics" then 
+                    should_continue_loop = true
+                    if tools.get_diagnostics then
+                        result = tools.get_diagnostics(path)
+                    else
+                        result = "ERRO: A ferramenta get_diagnostics foi chamada, mas ainda não foi implementada no tools.lua pelo Coder."
+                    end
+                end
                 
                 if not pending_rewrite_content then
-                    new_content = new_content .. string.format('<tool_executed name="%s" path="%s">\n%s\n</tool_executed>\n\n>[Sistema]: Resultado:\n```text\n%s\n```', tostring(name), tostring(path), clean_inner, result)
+                    new_content = new_content .. string.format('<tool_call name="%s" path="%s">\n%s\n</tool_call>\n\n>[Sistema]: Resultado:\n```text\n%s\n```', tostring(name), tostring(path or ""), clean_inner, result)
                 end
             end
         end
@@ -377,6 +440,11 @@ function M.ExecuteTools(ia_idx)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
     end
 
+    if pending_rewrite_content or (not should_continue_loop and not M.is_autonomous) then
+        M.TerminateTurn()
+        return
+    end
+
     M.auto_loop_count = M.auto_loop_count + 1
     if M.auto_loop_count >= 15 then
         vim.notify("Limite de 15 loops atingido. Pausando por segurança.", vim.log.levels.WARN)
@@ -385,7 +453,11 @@ function M.ExecuteTools(ia_idx)
 
     local cfg = require('multi_context.config')
     local user_prefix = "## " .. (cfg.options.user_name or "Nardi") .. " >>"
-    local sys_msg = "[Sistema]: Ferramentas executadas. Leia o resultado. Se a tarefa foi concluída, informe o resultado final."
+    
+    local sys_msg = "[Sistema]: Informação coletada. Analise o resultado e continue."
+    if not should_continue_loop and M.is_autonomous then
+        sys_msg = "[Sistema]: Ação executada. Verifique se o passo foi concluído ou prossiga para a próxima ação."
+    end
 
     local b_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     table.insert(b_lines, ""); table.insert(b_lines, user_prefix .. " " .. sys_msg)
