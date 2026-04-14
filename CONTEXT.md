@@ -1,155 +1,77 @@
 # MultiContext AI - Plugin Neovim
 
 ## Visão Geral
-MultiContext AI é um plugin para Neovim que integra assistentes de IA com capacidades autônomas diretamente no editor. O plugin permite que desenvolvedores interajam com múltiplos agentes especializados (documentador, arquiteto, engenheiro, QA) através de uma interface de chat, com acesso direto ao sistema de arquivos e terminal.
+MultiContext AI é um plugin para Neovim que integra assistentes de IA com capacidades autônomas nativas (estilo Claude Code/Devin). O plugin permite interação com múltiplos agentes especializados através de uma interface de chat, com acesso direto ao sistema de arquivos, execução de terminal, loops autônomos de raciocínio (ReAct) e gerenciamento ativo de janela de contexto.
 
 ## Arquitetura Técnica
 
 ### Tecnologias Principais
-- **Linguagem**: Lua (para integração nativa com Neovim)
-- **APIs de IA Suportadas**: DeepSeek Chat, DeepSeek Coder, Claude 3 Haiku
-- **Interface**: Popup nativo do Neovim com bordas personalizáveis
-- **Gerenciamento de Plugins**: vim-plug
+- **Linguagem**: Lua (integração nativa com Neovim)
+- **Framework de Testes**: `plenary.nvim` (busted)
+- **Operações Assíncronas**: `vim.fn.jobstart` (HTTP não-bloqueante)
+- **Processamento de XML**: Parser funcional tolerante a falhas (substituiu Regex frágil)
 
-### Estrutura de Diretórios
-```
+### Estrutura de Diretórios Atualizada
+```text
 lua/multi_context/
-├── init.lua              # Módulo principal e ponto de entrada
-├── config.lua            # Configurações e gerenciamento de APIs
-├── agents.lua            # Gerenciamento de agentes especializados
-├── api_client.lua        # Cliente HTTP para APIs de IA
-├── api_handlers.lua      # Manipuladores específicos de APIs
-├── api_selector.lua      # Seleção de API
-├── commands.lua          # Comandos do usuário
-├── conversation.lua      # Gerenciamento de conversação
-├── context_builders.lua  # Construtores de contexto
-├── queue_editor.lua      # Editor de fila de tarefas
-├── tools.lua             # Ferramentas do sistema (arquivos, terminal)
-├── utils.lua             # Utilitários
-├── ui/
-│   ├── popup.lua         # Interface de popup
-│   └── highlights.lua    # Realce de sintaxe
-└── agents/
-    └── agents.json       # Definições dos agentes especializados
+├── init.lua              # Módulo principal, motor ReAct, parser de ferramentas e comandos
+├── config.lua            # Configurações (mesclagem profunda) e gestão de I/O (stdpath)
+├── agents.lua            # Gerenciamento de agentes e manual de ferramentas dinâmico
+├── api_client.lua        # Cliente HTTP, fila de APIs e fallback
+├── api_handlers.lua      # Manipuladores de requisição e Garbage Collector de temp files
+├── api_selector.lua      # UI de seleção de API
+├── commands.lua          # Rotas de comandos do Neovim
+├── conversation.lua      # Motor de reconstrução de histórico
+├── context_builders.lua  # Extratores de contexto com proteção contra OOM (>100kb/Binários)
+├── queue_editor.lua      # Editor visual de fila de tarefas
+├── tools.lua             # Ferramentas do sistema (leitura, edição cirúrgica, bash, git grep)
+├── utils.lua             # Utilitários e exportação isolada de Workspace (.mctx_chats)
+├── ui/                   # Interface gráfica e Highlights customizados
+└── tests/                # Suíte de testes automatizados (TDD/Plenary)
 ```
 
-## Funcionalidades Implementadas
+## Funcionalidades e Capacidades Implementadas
 
-### 1. Sistema de Agentes Especializados
-- **Documentador**: Cria e mantém documentação técnica
-- **Arquiteto**: Projeta sistemas e toma decisões técnicas
-- **Engenheiro**: Implementa código e corrige bugs
-- **QA**: Testa software e valida qualidade
+### 1. Sistema de Agentes e Identidade Persistente
+- **Agentes**: Documentador, Arquiteto, Coder, Inspetor Sintático/Semântico, Engenheiro de Prompt, QA, etc.
+- **Identidade (`@agente`)**: O plugin memoriza o agente ativo, mantendo a persona durante todo o ciclo de raciocínio das ferramentas até que seja resetado (`@reset`).
 
-### 2. Interface de Chat Inteligente
-- Popup com realce de sintaxe para diferentes papéis
-- Suporte a múltiplos contextos (arquivo, seleção, pasta, repositório)
-- Histórico de conversação persistente
-- Folds automáticos para organização
+### 2. Loop Autônomo e Raciocínio (ReAct)
+- Suporte ao modo manual (com aprovação de I/O) ou **Modo Autônomo Granular (`--auto`)**.
+- A IA pode encadear múltiplas ferramentas (ler -> analisar -> editar -> testar bash) em background sem poluir o chat.
+- Limite de segurança de 15 iterações (Circuit Breaker).
 
-### 3. Ferramentas Autônomas
-- **list_files**: Lista arquivos do projeto
-- **read_file**: Lê conteúdo de arquivos
-- **edit_file**: Sobrescreve arquivos completos
-- **replace_lines**: Substitui blocos de código específicos
-- **search_code**: Busca texto no repositório
-- **run_shell**: Executa comandos no terminal
+### 3. Gestão de Contexto e Compressão (Engenharia de Prompt)
+- O agente *Engenheiro de Prompt* possui a ferramenta exclusiva `rewrite_chat_buffer`.
+- **Garbage Collection de Tokens**: Capacidade de limpar o buffer atual, jogando fora stack traces mortos e resumindo o progresso.
+- **Segurança**: Antes de qualquer compressão destrutiva, um backup é feito em memória (`:ContextUndo`).
 
-### 4. Sistema de Memória (CONTEXT.md)
-- Memória de longo prazo do projeto
-- Atualização automática após conclusão de tarefas
-- Resumo de decisões técnicas e progresso
+### 4. Integração com Sistema e Workspace
+- Exportação de chats (`.mctx`) organizados automaticamente na raiz do repositório Git atual (`.mctx_chats/`).
+- Proteção OOM: Ignora automaticamente leitura de binários e arquivos > 100KB.
+- Limpeza automática (`VimLeavePre`) de payloads temporários gigantes gerados pelo `curl`.
 
-### 5. Recursos de Segurança
-- Validação de comandos perigosos (rm -rf, sudo, etc.)
-- Limite de loops autônomos (15 iterações)
-- Confirmação manual para operações críticas
-- Sistema de checkpoint para filas de tarefas
+### 5. Memória de Longo Prazo e Prompt Caching ⚡
+- Leitura silenciosa deste arquivo (`CONTEXT.md`) injetada no `system_prompt` para manter a equipe de IA ciente do escopo global.
+- **Otimização de Custos**: Implementação nativa de Prompt Caching (Anthropic, OpenAI e DeepSeek). A base de conhecimento do projeto e o manual de ferramentas são cacheados na memória dos servidores da API, reduzindo custos em até 90% e acelerando o *Time-to-First-Token*. O plugin exibe notificações visuais (UI) da economia em milhares de tokens no Neovim.
 
-## Configuração
-
-### Arquivos de Configuração
-1. **init.vim**: Configuração principal do plugin e atalhos
-2. **context_apis.json**: Definição das APIs de IA disponíveis
-3. **api_keys.json**: Chaves de API (não versionado)
-4. **agents.json**: Definições dos agentes especializados
-
-### Atalhos Principais
-- `<A-c>`: Abre chat de contexto (seleção ou linha atual)
-- `<A-h>`: Alterna popup de chat
-- `<A-w>`: Alterna visualização de workspace
-- `<A-f>`: Fuzzy finder de arquivos
-- `<A-b>`: Lista de buffers
-- `<A-d>`: Interface de banco de dados (DBUI)
+## Decisões Técnicas Críticas (Registro para Agentes)
+1. **Parser de Ferramentas Funcional**: O código abandonou a extração de `<tool_call>` baseada em Regex puro. O novo parser iterativo lida com JSON acidental dentro do XML, limpa crases Markdown e fecha tags esquecidas.
+2. **Estrutura de Histórico Estrita**: O envio de prompts agora separa rigorosamente os papéis (`user` -> `assistant`) em arrays JSON, abandonando a concatenação de texto bruto. Essa formatação foi crucial para garantir a compatibilidade do prefixo exato exigido pelo Prompt Caching.
+3. **Deep Merge de Configurações**: O `config.lua` usa `vim.tbl_deep_extend` para mesclar opções do usuário sem sobrescrever as predefinições de UI.
 
 ## Estado Atual do Desenvolvimento
 
-### ✅ Concluído
-- [x] Sistema básico de chat com APIs de IA
-- [x] Implementação de múltiplos agentes especializados
-- [x] Ferramentas de sistema (arquivos, terminal)
-- [x] Interface de popup com realce de sintaxe
-- [x] Sistema de memória CONTEXT.md
-- [x] Mecanismos de segurança
-- [x] Comandos para diferentes contextos (arquivo, pasta, git)
-- [x] Integração com workspace (.mctx files)
+### ✅ Concluído (Fases 1 a 11)
+- Loop autônomo ReAct e interface popup estável.
+- Isolamento de chats por projeto (Workspace Git).
+- Compressão de Contexto e `:ContextUndo`.
+- Otimização de Prompt Caching integrada aos Handlers HTTP.
+- **Suíte de Testes Automatizada** (100% de cobertura nos módulos de I/O, config, string e payload mocking).
 
-### 🔄 Em Desenvolvimento/Planejado
-- [ ] Sistema de plugins para agentes
-- [ ] Cache inteligente de respostas
-- [ ] Integração com mais APIs de IA
-- [ ] Sistema de templates para agentes
-- [ ] Dashboard de status do projeto
-- [ ] Exportação de conversações em formatos diversos
-- [ ] Suporte a múltiplos workspaces simultâneos
-
-## Decisões Técnicas
-
-### 1. Arquitetura Modular
-O plugin foi projetado com módulos independentes para facilitar manutenção e extensão. Cada responsabilidade está isolada em seu próprio arquivo Lua.
-
-### 2. Sistema de Agentes
-A abordagem de agentes especializados permite que diferentes aspectos do desenvolvimento sejam tratados por "especialistas" virtuais, melhorando a qualidade das interações.
-
-### 3. Segurança First
-Implementação robusta de segurança com validação de comandos, limites de execução e confirmações manuais para operações perigosas.
-
-### 4. Integração Nativa
-Uso extensivo das APIs nativas do Neovim (nvim_buf_*, nvim_win_*) para melhor performance e integração.
-
-## Próximos Passos
-
-### Prioridade Alta
-1. **Refatoração do Código**: Consolidar módulos redundantes e melhorar coesão
-2. **Testes Unitários**: Implementar suite de testes para funcionalidades críticas
-3. **Documentação Completa**: Criar documentação detalhada para usuários e desenvolvedores
-
-### Prioridade Média
-1. **Sistema de Plugins**: Permitir que usuários criem seus próprios agentes
-2. **Cache de Contexto**: Implementar cache para respostas frequentes
-3. **Integração com LSP**: Melhor integração com Language Server Protocol
-
-### Prioridade Baixa
-1. **Interface Web**: Versão web do chat para colaboração remota
-2. **Analytics**: Coleta anônima de métricas de uso
-3. **Marketplace**: Repositório de agentes e templates da comunidade
-
-## Notas de Desenvolvimento
-
-### Dependências Externas
-- **vim-plug**: Gerenciador de plugins
-- **jq**: Para formatação de JSON (opcional)
-- **Python 3**: Para alguns provedores (configurável)
-
-### Compatibilidade
-- Neovim 0.8+
-- Sistemas Unix-like (Linux, macOS)
-- Testado principalmente no Fish shell, mas compatível com Bash/Zsh
-
-### Performance
-O plugin foi otimizado para operações assíncronas e uso mínimo de recursos. As operações de IA são feitas via HTTP assíncrono para não bloquear o editor.
+### 🔄 Planejado / Próximos Passos
+1. **Integração LSP (Foco Atual)**: Criar uma ferramenta para o agente ler diretamente os diagnósticos de erro da linha/buffer atual do Neovim (via `vim.diagnostic.get()`), permitindo autocorreção sintática em tempo real no loop autônomo.
+2. **Sistema de Plugins Externos**: Permitir que usuários definam e baixem agentes predefinidos via repositórios do Github, estendendo o arquivo `agents.json`.
 
 ---
-
-*Última atualização: $(date +%Y-%m-%d) - Início do projeto*
-
+*Última atualização: 2026-04-13 - Fase 11 (Prompt Caching concluído).*
