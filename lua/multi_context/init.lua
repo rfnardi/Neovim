@@ -271,6 +271,24 @@ function M.ExecuteTools(ia_idx)
     local process_lines = {}; for i = last_ia_idx, #lines do table.insert(process_lines, lines[i]) end
     local content_to_process = table.concat(process_lines, "\n")
     
+    -- =============================================================
+    -- SANITIZADOR ANTI-ALUCINAÇÃO DE SINTAXE (GLM-5, Llama, etc)
+    -- =============================================================
+    -- 1. Conserta lixos de fechamento como </arg_value>tool_call>
+    content_to_process = content_to_process:gsub("</[^>]*tool_call%s*>", "</tool_call>")
+    
+    -- 2. Conserta a alucinação <tool_call>run_shell>
+    content_to_process = content_to_process:gsub("<tool_call>%s*([a-zA-Z_]+)%s*>", '<tool_call name="%1">')
+    
+    -- 3. Conserta tags formatadas com o nome direto (ex: <run_shell> ou <edit_file path="x">)
+    local valid_tools_list = {"list_files", "read_file", "search_code", "edit_file", "run_shell", "replace_lines", "rewrite_chat_buffer", "get_diagnostics"}
+    for _, tool in ipairs(valid_tools_list) do
+        content_to_process = content_to_process:gsub("<" .. tool .. "%s*>", '<tool_call name="' .. tool .. '">')
+        content_to_process = content_to_process:gsub("<" .. tool .. "%s+([^>]+)>", '<tool_call name="' .. tool .. '" %1>')
+        content_to_process = content_to_process:gsub("</" .. tool .. "%s*>", "</tool_call>")
+    end
+    -- =============================================================
+
     local new_content = ""; local cursor = 1; local has_changes = false
     local abort_all = false; local approve_all = false
     local pending_rewrite_content = nil
@@ -304,13 +322,29 @@ function M.ExecuteTools(ia_idx)
         
         new_content = new_content .. content_to_process:sub(cursor, tag_start - 1)
         local tag_str = content_to_process:sub(tag_start, tag_end)
-        local close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
+        local is_self_closing = tag_str:match("/%s*>$")
+        local close_start, close_end, inner
+        if is_self_closing then
+            inner = ""
+            close_start = tag_end + 1
+            close_end = tag_end
+        else
+            close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
+            local next_open = content_to_process:find("<tool_call", tag_end + 1)
+            
+            -- MÁGICA: Se outra tag abrir antes dessa fechar, forçamos o fechamento implícito!
+            if next_open and (not close_start or next_open < close_start) then
+                close_start = next_open
+                close_end = next_open - 1
+                inner = content_to_process:sub(tag_end + 1, close_start - 1)
+            elseif not close_start then 
+                inner = content_to_process:sub(tag_end + 1)
+                close_end = #content_to_process
+            else 
+                inner = content_to_process:sub(tag_end + 1, close_start - 1) 
+            end
+        end
         
-        local inner = ""
-        if not close_start then inner = content_to_process:sub(tag_end + 1); close_end = #content_to_process
-        else inner = content_to_process:sub(tag_end + 1, close_start - 1) end
-        
-        -- Declaração local ANTES do goto para satisfazer o compilador
         local attrs_str, name, path, query, start_line, end_line, clean_inner
 
         if tick_count % 2 ~= 0 then
@@ -319,7 +353,7 @@ function M.ExecuteTools(ia_idx)
             goto continue
         end
 
-        attrs_str = tag_str:sub(11, -2)
+        attrs_str = tag_str
         name = get_attr(attrs_str, "name")
         path = get_attr(attrs_str, "path")
         query = get_attr(attrs_str, "query")
@@ -346,8 +380,47 @@ function M.ExecuteTools(ia_idx)
             goto continue
         end
 
-        clean_inner = inner:gsub("^%s*```[%w_]*\n", ""):gsub("\n%s*```%s*$", "")
+        clean_inner = inner
         
+        do
+            -- Lista de lixos conhecidos que IAs teimosas inventam
+            local h_tags = {"content", "code", "command", "arg_value", "argument", "parameters", "text", "source", "tool_call"}
+            local changed = true
+            while changed do
+                changed = false
+                
+                -- 1. Remove as crases Markdown (```) encostadas nas bordas
+                local before_md = clean_inner
+                clean_inner = clean_inner:gsub("^%s*```[%w_]*\n", ""):gsub("\n%s*```%s*$", "")
+                if before_md ~= clean_inner then changed = true end
+                
+                -- 2. Limpeza profunda de tags órfãs e normais
+                for _, tag in ipairs(h_tags) do
+                    -- Cenário A: Tag completa <tag>...</tag>
+                    local pat_full = "^%s*<" .. tag .. ">%s*(.-)%s*</" .. tag .. ">%s*$"
+                    local val = clean_inner:match(pat_full)
+                    if val then
+                        clean_inner = val
+                        changed = true
+                    end
+                    
+                    -- Cenário B: Tag de fechamento órfã </tag> no fim do arquivo
+                    local pat_end = "%s*</" .. tag .. ">%s*$"
+                    if clean_inner:match(pat_end) then
+                        clean_inner = clean_inner:gsub(pat_end, "")
+                        changed = true
+                    end
+                    
+                    -- Cenário C: Tag de abertura órfã <tag> no início
+                    local pat_start = "^%s*<" .. tag .. ">%s*"
+                    if clean_inner:match(pat_start) then
+                        clean_inner = clean_inner:gsub(pat_start, "")
+                        changed = true
+                    end
+                end
+            end
+        end
+
         if abort_all then
             new_content = new_content .. tag_str .. clean_inner .. "</tool_call>"; cursor = close_end + 1
         else

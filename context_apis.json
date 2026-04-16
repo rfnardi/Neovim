@@ -4,8 +4,8 @@
   "apis": [
     {
       "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
+        "X-goog-api-key": "{API_KEY}",
+        "Content-Type": "application/json"
       },
       "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
       "name": "google_gemini_3.1-pro",
@@ -16,8 +16,8 @@
     },
     {
       "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
+        "X-goog-api-key": "{API_KEY}",
+        "Content-Type": "application/json"
       },
       "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
       "name": "google_gemini_2.5-pro",
@@ -28,8 +28,8 @@
     },
     {
       "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
+        "X-goog-api-key": "{API_KEY}",
+        "Content-Type": "application/json"
       },
       "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
       "name": "google_gemini_2.5-flash",
@@ -40,8 +40,8 @@
     },
     {
       "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
+        "X-goog-api-key": "{API_KEY}",
+        "Content-Type": "application/json"
       },
       "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
       "name": "google_gemini_2.0-flash",
@@ -140,7 +140,7 @@
       },
       "url": "https://api.groq.com/openai/v1/chat/completions",
       "name": "groq1",
-      "model": "openai/gpt-oss-120b",
+      "model": "llama-3.1-70B-versatile",
       "num_tries": 1,
       "include_in_fall-back_mode": true,
       "api_type": "openai"

@@ -71,6 +71,33 @@ lua/multi_context/
 3. **Deep Merge de Configurações**: O `config.lua` usa `vim.tbl_deep_extend` para mesclar opções do usuário sem sobrescrever as predefinições de UI.
 4. **Integração LSP — get_diagnostics**: Uso de `path` como único atributo (compatível com o parser existente que já extrai `path`). Rastreamento do buffer de código ativo via `popup.code_buf_before_popup` antes do popup roubar o foco. Truncamento agressivo: 50 diagnósticos / 3KB. `vim.wait` com verificação de clientes LSP para sincronização. `bufadd`+`bufload` para arquivos não carregados na sessão. Mensagem informativa quando não há LSP attachado.
 
+---
+
+## 🛠️ Análise de Qualidade de Código e Refatoração (Fase 13 - Atual)
+
+### Pontos Fortes
+- **Arquitetura Resiliente**: Tolerância a falhas estabelecida com backups de buffer (`:ContextUndo`), proteção OOM contra arquivos grandes e garbage collector automático em tempo de saída (`VimLeavePre`).
+- **Uso Eficiente do Ecossistema Neovim**: Execução HTTP não-bloqueante via `jobstart`, highlights dinâmicos e isolamento por namespaces (`nvim_create_namespace`).
+- **Suíte de Testes TDD**: Plenary e Busted configurados e testando módulos críticos, prevenindo regressões nas lógicas de contexto e strings.
+
+### Dívida Técnica (Pontos de Fraqueza)
+- **God Object e Acoplamento**: O arquivo `init.lua` agrega responsabilidades demais. Ele manipula o buffer da interface (UI), faz requisições HTTP indiretas e avalia regex para capturar tags, quebrando o princípio de responsabilidade única (SRP).
+- **Estado Global Compartilhado**: O controle do loop ReAct (ex: `M.is_autonomous`, `M.active_agent`) é gerenciado diretamente na raiz do `init.lua`, dificultando isolamento de estado caso existam múltiplos buffers de chat simultâneos no futuro.
+- **WET (Write Everything Twice)**: Duplicação desnecessária da gestão do `jobstart` (criar arquivo `tmp`, instanciar o curl, limpar o arquivo) repetida explicitamente em cada provedor no `api_handlers.lua`.
+
+### Blocos Monolíticos Mapeados
+1. **`init.lua` -> `ExecuteTools(ia_idx)`**
+   - Um bloco de ~200 linhas que age como 4 funções distintas: (1) Leitura de Buffer UI, (2) Parser robusto de XML Anti-Alucinação, (3) Prompts de Confirmação de Segurança de Shell e (4) Roteador do Loop ReAct.
+   - *Objetivo*: Quebrar em `tool_parser.lua`, `tool_runner.lua` e `react_loop.lua`.
+2. **`init.lua` -> `SendFromPopup()`**
+   - Mistura a detecção de intenção do usuário (`@agente`, `--auto`), a junção de `CONTEXT.md` ao histórico e as funções de manipulação de streaming visual na UI.
+   - *Objetivo*: Extrair a preparação do input para um `prompt_parser.lua`.
+3. **`api_handlers.lua`**
+   - Funções massivas para manipular cada provider (OpenAI, Gemini, Anthropic). 
+   - *Objetivo*: Abstrair um construtor genérico de HTTP Clients no `api_client.lua`.
+
+---
+
 ## Estado Atual do Desenvolvimento
 
 ### ✅ Concluído (Fases 1 a 12)
@@ -82,15 +109,9 @@ lua/multi_context/
 - **Integração LSP — get_diagnostics** (Fase 12 implementada, aguardando validação de testes).
 
 ### 🔄 Planejado / Próximos Passos
-1. **Integração LSP — Fase 2 (Smart Push)**: Diagnósticos injetados automaticamente no contexto após edições no modo autônomo, sem necessidade da IA pedir explicitamente.
-2. **Sistema de Plugins Externos**: Permitir que usuários definam e baixem agentes predefinidos via repositórios do Github, estendendo o arquivo `agents.json`.
+1. **Refatoração de Blocos Monolíticos (Fase 13)**: Desacoplamento do arquivo `init.lua` e padronização DRY do `api_handlers.lua` (Conforme análise mapeada acima).
+2. **Integração LSP — Fase 2 (Smart Push)**: Diagnósticos injetados automaticamente no contexto após edições no modo autônomo, sem necessidade da IA pedir explicitamente.
+3. **Sistema de Plugins Externos**: Permitir que usuários definam e baixem agentes predefinidos via repositórios do Github, estendendo o arquivo `agents.json`.
 
 ---
-*Última atualização: 2026-04-13 - Fase 12 (Integração LSP — get_diagnostics implementada).*
-</arg_value>
-
-
-
-</arg_value>
-
-
+*Última atualização: 2026-04-16 - Fase 13 (Início da análise e refatoração arquitetural).*
