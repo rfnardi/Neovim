@@ -1,27 +1,22 @@
-
+-- lua/multi_context/init.lua
 local api = vim.api
 local utils = require('multi_context.utils')
 local popup = require('multi_context.ui.popup')
 local commands = require('multi_context.commands')
-local api_handlers = require('multi_context.api_handlers')
 local config = require('multi_context.config')
 
-local M = {}
+-- Novos Módulos de Responsabilidade Única (Refatoração Fase 13)
+local tool_parser = require('multi_context.tool_parser')
+local tool_runner = require('multi_context.tool_runner')
+local react_loop = require('multi_context.react_loop')
+local prompt_parser = require('multi_context.prompt_parser')
 
+local M = {}
 M.popup_buf = popup.popup_buf
 M.popup_win = popup.popup_win
-M.history = {}
 M.current_workspace_file = nil
 
-M.is_autonomous = false
-M.active_agent = nil
-M.auto_loop_count = 0
-M.queued_tasks = nil
-M.last_backup = nil
-
-M.setup = function(opts)
-    if config and config.setup then config.setup(opts) end
-end
+M.setup = function(opts) if config and config.setup then config.setup(opts) end end
 
 M.ContextChatFull = commands.ContextChatFull
 M.ContextChatSelection = commands.ContextChatSelection
@@ -37,12 +32,12 @@ M.TogglePopup = commands.TogglePopup
 M.ContextUndo = function()
     local p = require('multi_context.ui.popup')
     local buf = p.popup_buf
-    if not buf or not vim.api.nvim_buf_is_valid(buf) then buf = vim.api.nvim_get_current_buf() end
-    if M.last_backup then
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, M.last_backup)
+    if not buf or not api.nvim_buf_is_valid(buf) then buf = api.nvim_get_current_buf() end
+    if react_loop.state.last_backup then
+        api.nvim_buf_set_lines(buf, 0, -1, false, react_loop.state.last_backup)
         require('multi_context.ui.highlights').apply_chat(buf)
-        require('multi_context.ui.popup').create_folds(buf)
-        require('multi_context.ui.popup').update_title()
+        p.create_folds(buf)
+        p.update_title()
         vim.notify("✅ Chat restaurado do último backup com sucesso!", vim.log.levels.INFO)
     else
         vim.notify("Nenhum backup de compressão encontrado nesta sessão.", vim.log.levels.WARN)
@@ -76,9 +71,7 @@ popup.create_popup = function(initial_content)
 end
 
 M.TerminateTurn = function()
-    M.auto_loop_count = 0
-    M.is_autonomous = false
-    
+    react_loop.reset_turn()
     local p = require('multi_context.ui.popup')
     local buf = p.popup_buf
     if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
@@ -89,16 +82,16 @@ M.TerminateTurn = function()
     
     local next_prompt_lines = { "", "## API atual: " .. current_api, user_prefix .. " " }
     
-    if M.queued_tasks and M.queued_tasks ~= "" then
+    if react_loop.state.queued_tasks and react_loop.state.queued_tasks ~= "" then
         table.insert(next_prompt_lines, "> [Checkpoint] Avalie a resposta acima. Pressione <CR> para continuar a fila:")
-        for _, q_line in ipairs(vim.split(M.queued_tasks, "\n")) do table.insert(next_prompt_lines, q_line) end
-        M.queued_tasks = nil
+        for _, q_line in ipairs(vim.split(react_loop.state.queued_tasks, "\n")) do table.insert(next_prompt_lines, q_line) end
+        react_loop.state.queued_tasks = nil
     end
     
     vim.api.nvim_buf_set_lines(buf, -1, -1, false, next_prompt_lines)
-    require('multi_context.ui.popup').create_folds(buf)
+    p.create_folds(buf)
     require('multi_context.ui.highlights').apply_chat(buf)
-    require('multi_context.ui.popup').update_title()
+    p.update_title()
     
     if p.popup_win and vim.api.nvim_win_is_valid(p.popup_win) then
         vim.api.nvim_win_set_cursor(p.popup_win, { vim.api.nvim_buf_line_count(buf), #next_prompt_lines[#next_prompt_lines] })
@@ -110,9 +103,7 @@ local function get_context_md_content()
     local root = vim.fn.system("git rev-parse --show-toplevel")
     if vim.v.shell_error == 0 then root = root:gsub("\n", "") else root = vim.fn.getcwd() end
     local filepath = root .. "/CONTEXT.md"
-    if vim.fn.filereadable(filepath) == 1 then
-        return table.concat(vim.fn.readfile(filepath), "\n")
-    end
+    if vim.fn.filereadable(filepath) == 1 then return table.concat(vim.fn.readfile(filepath), "\n") end
     return nil
 end
 
@@ -138,38 +129,21 @@ function M.SendFromPopup()
         end
     end
 
-    local current_user_text = table.concat(current_task_lines, "\n"):gsub("^%s*", ""):gsub("%s*$", "")
-    if #queued_tasks_lines > 0 then M.queued_tasks = table.concat(queued_tasks_lines, "\n") end
+    local raw_user_text = table.concat(current_task_lines, "\n"):gsub("^%s*", ""):gsub("%s*$", "")
+    if #queued_tasks_lines > 0 then react_loop.state.queued_tasks = table.concat(queued_tasks_lines, "\n") end
+    if raw_user_text == "" then vim.notify("Digite algo antes de enviar.", vim.log.levels.WARN); return end
 
-    if current_user_text == "" then vim.notify("Digite algo antes de enviar.", vim.log.levels.WARN); return end
-
-    local active_agent_name = nil
-    local active_agent_prompt = ""
-    local text_to_send = current_user_text
-
-    local agent_match = text_to_send:match("@([%w_]+)")
-    if agent_match then
-        if agent_match == "reset" then
-            M.active_agent = nil
-            text_to_send = text_to_send:gsub("@reset%s*", "")
-        elseif agents[agent_match] then
-            M.active_agent = agent_match
-            text_to_send = text_to_send:gsub("@" .. agent_match .. "%s*", "")
-        end
+    -- Utiliza o Parser Desacoplado
+    local parsed_intent = prompt_parser.parse_user_input(raw_user_text, agents)
+    
+    if parsed_intent.agent_name then
+        if parsed_intent.agent_name == "reset" then react_loop.state.active_agent = nil
+        else react_loop.state.active_agent = parsed_intent.agent_name end
     end
+    if parsed_intent.is_autonomous then react_loop.state.is_autonomous = true end
 
-    if text_to_send:match("%-%-auto") then
-        M.is_autonomous = true
-        text_to_send = text_to_send:gsub("%-%-auto%s*", "")
-    end
-
-    if M.active_agent and agents[M.active_agent] then
-        active_agent_name = M.active_agent
-        active_agent_prompt = "\n\n=== INSTRUÇÕES DO AGENTE: " .. string.upper(M.active_agent) .. " ===\n" .. agents[M.active_agent].system_prompt
-        if agents[M.active_agent].use_tools then
-            active_agent_prompt = active_agent_prompt .. "\n\n" .. require('multi_context.agents').get_tools_manual()
-        end
-    end
+    local text_to_send = parsed_intent.text_to_send
+    local active_agent_name = react_loop.state.active_agent
 
     local sending_msg = "[Enviando requisição" .. (active_agent_name and (" via @" .. active_agent_name) or "") .. "...]"
     api.nvim_buf_set_lines(buf, -1, -1, false, { "", sending_msg })
@@ -177,19 +151,16 @@ function M.SendFromPopup()
     local history_lines = api.nvim_buf_get_lines(buf, 0, start_idx, false)
     local messages = require('multi_context.conversation').build_history(history_lines)
     
-    local system_prompt = "Você é um Engenheiro de Software Autônomo no Neovim."
+    local base_sys_prompt = "Você é um Engenheiro de Software Autônomo no Neovim."
     local memory_context = get_context_md_content()
-    if memory_context then
-        system_prompt = system_prompt .. "\n\n=== ESTADO ATUAL DO PROJETO (MEMÓRIA) ===\n" .. memory_context
-    end
-    if active_agent_prompt ~= "" then system_prompt = system_prompt .. "\n\n" .. active_agent_prompt end
+    local system_prompt = prompt_parser.build_system_prompt(base_sys_prompt, memory_context, active_agent_name, agents)
     
-		table.insert(messages, 1, { role = "system", content = system_prompt })
-				-- Funde a tarefa atual com o contexto órfão recém carregado (Evita erro Strict User/Assitant)
-				if #messages > 1 and messages[#messages].role == "user" then
-						messages[#messages].content = messages[#messages].content .. "\n\n" .. text_to_send
-				else
-						table.insert(messages, { role = "user", content = text_to_send })
+    table.insert(messages, 1, { role = "system", content = system_prompt })
+    
+    if #messages > 1 and messages[#messages].role == "user" then
+        messages[#messages].content = messages[#messages].content .. "\n\n" .. text_to_send
+    else
+        table.insert(messages, { role = "user", content = text_to_send })
     end
 
     local response_started = false
@@ -208,7 +179,6 @@ function M.SendFromPopup()
                 local ia_title = "## IA (" .. api_entry.model .. ")" .. (active_agent_name and ("[@" .. active_agent_name .. "]") or "") .. " >> "
                 local count_before = api.nvim_buf_line_count(buf)
                 api.nvim_buf_set_lines(buf, -1, -1, false, { "", ia_title, "" })
-                
                 current_ia_start_idx = count_before + 2
                 response_started = true
             end
@@ -226,14 +196,12 @@ function M.SendFromPopup()
         end,
         function(api_entry, metrics)
             if not response_started then remove_sending_msg() end
-            
             if metrics and (metrics.cache_read_input_tokens or 0) > 0 then
                 vim.notify(string.format("⚡ Prompt Caching: %d tokens economizados!", metrics.cache_read_input_tokens), vim.log.levels.INFO)
             end
             
             local b_lines = api.nvim_buf_get_lines(buf, 0, -1, false)
             local has_tool = false
-            
             local scan_start = current_ia_start_idx or 1
             for i = scan_start, #b_lines do
                 if b_lines[i]:match("<tool_call") then has_tool = true; break end
@@ -245,7 +213,7 @@ function M.SendFromPopup()
         function(err_msg)
             remove_sending_msg()
             api.nvim_buf_set_lines(buf, -1, -1, false, { "", "**[ERRO]** " .. err_msg, "", user_prefix .. " " })
-            M.is_autonomous = false
+            react_loop.state.is_autonomous = false
         end
     )
 end
@@ -269,236 +237,71 @@ function M.ExecuteTools(ia_idx)
 
     local prefix_lines = {}; for i = 1, last_ia_idx - 1 do table.insert(prefix_lines, lines[i]) end
     local process_lines = {}; for i = last_ia_idx, #lines do table.insert(process_lines, lines[i]) end
-    local content_to_process = table.concat(process_lines, "\n")
     
-    -- =============================================================
-    -- SANITIZADOR ANTI-ALUCINAÇÃO DE SINTAXE (GLM-5, Llama, etc)
-    -- =============================================================
-    -- 1. Conserta lixos de fechamento como </arg_value>tool_call>
-    content_to_process = content_to_process:gsub("</[^>]*tool_call%s*>", "</tool_call>")
-    
-    -- 2. Conserta a alucinação <tool_call>run_shell>
-    content_to_process = content_to_process:gsub("<tool_call>%s*([a-zA-Z_]+)%s*>", '<tool_call name="%1">')
-    
-    -- 3. Conserta tags formatadas com o nome direto (ex: <run_shell> ou <edit_file path="x">)
-    local valid_tools_list = {"list_files", "read_file", "search_code", "edit_file", "run_shell", "replace_lines", "rewrite_chat_buffer", "get_diagnostics"}
-    for _, tool in ipairs(valid_tools_list) do
-        content_to_process = content_to_process:gsub("<" .. tool .. "%s*>", '<tool_call name="' .. tool .. '">')
-        content_to_process = content_to_process:gsub("<" .. tool .. "%s+([^>]+)>", '<tool_call name="' .. tool .. '" %1>')
-        content_to_process = content_to_process:gsub("</" .. tool .. "%s*>", "</tool_call>")
-    end
-    -- =============================================================
+    -- Utiliza o Parser Desacoplado
+    local content_to_process = tool_parser.sanitize_payload(table.concat(process_lines, "\n"))
 
-    local new_content = ""; local cursor = 1; local has_changes = false
-    local abort_all = false; local approve_all = false
+    local new_content = ""
+    local cursor = 1
+    local has_changes = false
+    local abort_all = false
+    local approve_all_ref = { value = false }
     local pending_rewrite_content = nil
     local should_continue_loop = false 
 
-    local dangerous_commands = {"rm%s+-rf", "mkfs", "sudo ", ">%s*/dev", "chmod ", "chown "}
-    local function is_dangerous(cmd)
-        if not cmd then return false end
-        for _, pat in ipairs(dangerous_commands) do if cmd:match(pat) then return true end end
-        return false
-    end
-
-    -- Declarado FORA do loop para evitar erros de escopo do LuaJIT
-    local function get_attr(attrs, n) 
-        if not attrs then return nil end
-        return attrs:match(n .. '%s*=%s*["\']([^"\']+)["\']') 
-    end
-
-    local valid_tools = {
-        list_files = true, read_file = true, search_code = true,
-        edit_file = true, run_shell = true, replace_lines = true,
-        rewrite_chat_buffer = true, get_diagnostics = true
-    }
-
     while cursor <= #content_to_process do
-        local tag_start, tag_end = content_to_process:find("<tool_call[^>]*>", cursor)
-        if not tag_start then new_content = new_content .. content_to_process:sub(cursor); break end
-
-        local text_before = content_to_process:sub(1, tag_start - 1)
-        local _, tick_count = text_before:gsub("```", "")
+        local parsed_tag = tool_parser.parse_next_tool(content_to_process, cursor)
         
-        new_content = new_content .. content_to_process:sub(cursor, tag_start - 1)
-        local tag_str = content_to_process:sub(tag_start, tag_end)
-        local is_self_closing = tag_str:match("/%s*>$")
-        local close_start, close_end, inner
-        if is_self_closing then
-            inner = ""
-            close_start = tag_end + 1
-            close_end = tag_end
-        else
-            close_start, close_end = content_to_process:find("</tool_call%s*>", tag_end + 1)
-            local next_open = content_to_process:find("<tool_call", tag_end + 1)
-            
-            -- MÁGICA: Se outra tag abrir antes dessa fechar, forçamos o fechamento implícito!
-            if next_open and (not close_start or next_open < close_start) then
-                close_start = next_open
-                close_end = next_open - 1
-                inner = content_to_process:sub(tag_end + 1, close_start - 1)
-            elseif not close_start then 
-                inner = content_to_process:sub(tag_end + 1)
-                close_end = #content_to_process
-            else 
-                inner = content_to_process:sub(tag_end + 1, close_start - 1) 
-            end
+        if not parsed_tag then
+            new_content = new_content .. content_to_process:sub(cursor)
+            break
         end
-        
-        local attrs_str, name, path, query, start_line, end_line, clean_inner
 
-        if tick_count % 2 ~= 0 then
-            new_content = new_content .. tag_str .. inner .. (close_start and "</tool_call>" or "")
-            cursor = close_end + 1
+        new_content = new_content .. parsed_tag.text_before
+
+        if parsed_tag.is_invalid or not parsed_tag.name or parsed_tag.name == "" then
+            new_content = new_content .. parsed_tag.raw_tag .. (parsed_tag.inner or "") .. (parsed_tag.close_start and "</tool_call>" or "")
+            cursor = parsed_tag.close_end + 1
             goto continue
-        end
-
-        attrs_str = tag_str
-        name = get_attr(attrs_str, "name")
-        path = get_attr(attrs_str, "path")
-        query = get_attr(attrs_str, "query")
-        start_line = get_attr(attrs_str, "start")
-        end_line = get_attr(attrs_str, "end")
-
-        if not name or name == "" then
-            local ok, json = pcall(vim.fn.json_decode, vim.trim(inner))
-            if ok and type(json) == "table" then
-                name = json.name
-                if type(json.arguments) == "table" then
-                    path = json.arguments.path; query = json.arguments.query
-                    start_line = json.arguments.start or json.arguments.start_line
-                    end_line = json.arguments["end"] or json.arguments.end_line
-                    inner = json.arguments.command or json.arguments.content or json.arguments.code or inner
-                end
-            end
-        end
-
-        -- NOVA DEFESA 3: Ignora menções genéricas à tag no meio do texto
-        if not name or name == "" or name == "nil" then
-            new_content = new_content .. tag_str
-            cursor = tag_end + 1
-            goto continue
-        end
-
-        clean_inner = inner
-        
-        do
-            -- Lista de lixos conhecidos que IAs teimosas inventam
-            local h_tags = {"content", "code", "command", "arg_value", "argument", "parameters", "text", "source", "tool_call"}
-            local changed = true
-            while changed do
-                changed = false
-                
-                -- 1. Remove as crases Markdown (```) encostadas nas bordas
-                local before_md = clean_inner
-                clean_inner = clean_inner:gsub("^%s*```[%w_]*\n", ""):gsub("\n%s*```%s*$", "")
-                if before_md ~= clean_inner then changed = true end
-                
-                -- 2. Limpeza profunda de tags órfãs e normais
-                for _, tag in ipairs(h_tags) do
-                    -- Cenário A: Tag completa <tag>...</tag>
-                    local pat_full = "^%s*<" .. tag .. ">%s*(.-)%s*</" .. tag .. ">%s*$"
-                    local val = clean_inner:match(pat_full)
-                    if val then
-                        clean_inner = val
-                        changed = true
-                    end
-                    
-                    -- Cenário B: Tag de fechamento órfã </tag> no fim do arquivo
-                    local pat_end = "%s*</" .. tag .. ">%s*$"
-                    if clean_inner:match(pat_end) then
-                        clean_inner = clean_inner:gsub(pat_end, "")
-                        changed = true
-                    end
-                    
-                    -- Cenário C: Tag de abertura órfã <tag> no início
-                    local pat_start = "^%s*<" .. tag .. ">%s*"
-                    if clean_inner:match(pat_start) then
-                        clean_inner = clean_inner:gsub(pat_start, "")
-                        changed = true
-                    end
-                end
-            end
         end
 
         if abort_all then
-            new_content = new_content .. tag_str .. clean_inner .. "</tool_call>"; cursor = close_end + 1
-        else
-            has_changes = true
+            new_content = new_content .. parsed_tag.raw_tag .. parsed_tag.inner .. "</tool_call>"
+            cursor = parsed_tag.close_end + 1
+            goto continue
+        end
 
-            if not valid_tools[name] then
-                local err_msg = string.format("Ferramenta '%s' não existe. Consulte o manual de ferramentas.", tostring(name))
-                new_content = new_content .. string.format('<tool_call name="%s">\n%s\n</tool_call>\n\n>[Sistema]: ERRO - %s', tostring(name), clean_inner, err_msg)
-                should_continue_loop = false 
-                M.is_autonomous = false
-                cursor = close_end + 1
-                goto continue
-            end
+        has_changes = true
 
-            local choice = 1
-            if not approve_all then
-                if M.is_autonomous then
-                    if name == "run_shell" and is_dangerous(clean_inner) then
-                        vim.notify("🛡️ Comando PERIGOSO detectado.", vim.log.levels.ERROR)
-                        choice = vim.fn.confirm("Permitir execução PERIGOSA: " .. clean_inner, "&Sim\n&Nao\n&Todos\n&Cancelar", 2)
-                    elseif name == "rewrite_chat_buffer" then
-                        choice = vim.fn.confirm("Agente solicitou DESTRUIR E COMPRIMIR o chat. Permitir?", "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
-                    else choice = 3; approve_all = true end
-                else
-                    local target = path and ("\nAlvo: " .. path) or ""
-                    target = query and (target .. "\nBusca: " .. query) or target
-                    if name == "rewrite_chat_buffer" then target = "\n[ALERTA DESTRUTIVO: Isso reescreverá o buffer]" end
-                    choice = vim.fn.confirm(string.format("Agente requisitou [%s]. Permitir?%s", tostring(name), target), "&Sim\n&Nao\n&Todos\n&Cancelar", 1)
-                end
-            end
+        -- ==========================================
+        -- BLOCO ISOLADO PARA RESOLVER O ERRO DO GOTO
+        -- ==========================================
+        do
+            local tag_output, should_abort, cont_loop, rew_content, backup_made = tool_runner.execute(
+                parsed_tag, 
+                react_loop.state.is_autonomous, 
+                approve_all_ref, 
+                buf
+            )
 
-            if choice == 3 then approve_all = true; choice = 1
-            elseif choice == 4 or choice == 0 then abort_all = true; new_content = new_content .. tag_str .. clean_inner .. "</tool_call>"; cursor = close_end + 1; goto continue end
+            if backup_made then react_loop.state.last_backup = backup_made end
+            if rew_content then pending_rewrite_content = rew_content end
+            if cont_loop then should_continue_loop = true end
 
-            local result = ""
-            if choice == 2 then
-                result = "Acesso NEGADO pelo usuario."
-                new_content = new_content .. string.format('<tool_call name="%s">\n%s\n</tool_call>\n\n>[Sistema]: ERRO - %s', tostring(name), clean_inner, result)
+            if should_abort then
+                abort_all = true
+                new_content = new_content .. parsed_tag.raw_tag .. parsed_tag.inner .. "</tool_call>"
             else
-                local tools = require('multi_context.tools')
-                if name == "rewrite_chat_buffer" then
-                    M.last_backup = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-                    local backup_file = vim.fn.stdpath("data") .. "/mctx_backup_" .. os.date("%Y%m%d_%H%M%S") .. ".mctx"
-                    vim.fn.writefile(M.last_backup, backup_file)
-                    vim.notify("💾 Backup pré-compressão salvo (use :ContextUndo para reverter)", vim.log.levels.INFO)
-                    pending_rewrite_content = clean_inner
-                    result = "Buffer reescrito."
-                elseif name == "list_files" then 
-                    should_continue_loop = true
-                    result = tools.list_files()
-                elseif name == "read_file" then 
-                    should_continue_loop = true
-                    result = tools.read_file(path)
-                elseif name == "search_code" then 
-                    should_continue_loop = true
-                    result = tools.search_code(query)
-                elseif name == "edit_file" then 
-                    result = tools.edit_file(path, clean_inner)
-                elseif name == "run_shell" then 
-                    result = tools.run_shell(clean_inner)
-                elseif name == "replace_lines" then 
-                    result = tools.replace_lines(path, start_line, end_line, clean_inner)
-                elseif name == "get_diagnostics" then 
-                    should_continue_loop = true
-                    if tools.get_diagnostics then
-                        result = tools.get_diagnostics(path)
-                    else
-                        result = "ERRO: A ferramenta get_diagnostics foi chamada, mas ainda não foi implementada no tools.lua pelo Coder."
-                    end
-                end
-                
-                if not pending_rewrite_content then
-                    new_content = new_content .. string.format('<tool_call name="%s" path="%s">\n%s\n</tool_call>\n\n>[Sistema]: Resultado:\n```text\n%s\n```', tostring(name), tostring(path or ""), clean_inner, result)
+                new_content = new_content .. tag_output
+                if tag_output:match(">%[Sistema%]: ERRO %- Ferramenta") then
+                    react_loop.state.is_autonomous = false
+                    should_continue_loop = false
                 end
             end
         end
+
         ::continue::
-        cursor = close_end + 1
+        cursor = parsed_tag.close_end + 1
     end
 
     if not has_changes or abort_all then M.TerminateTurn(); return end
@@ -513,14 +316,12 @@ function M.ExecuteTools(ia_idx)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, final_lines)
     end
 
-    if pending_rewrite_content or (not should_continue_loop and not M.is_autonomous) then
-        M.TerminateTurn()
-        return
+    if pending_rewrite_content or (not should_continue_loop and not react_loop.state.is_autonomous) then
+        M.TerminateTurn(); return
     end
 
-    M.auto_loop_count = M.auto_loop_count + 1
-    if M.auto_loop_count >= 15 then
-        vim.notify("Limite de 15 loops atingido. Pausando por segurança.", vim.log.levels.WARN)
+    -- Circuit Breaker isolado
+    if react_loop.check_circuit_breaker() then
         M.TerminateTurn(); return
     end
 
@@ -528,7 +329,7 @@ function M.ExecuteTools(ia_idx)
     local user_prefix = "## " .. (cfg.options.user_name or "Nardi") .. " >>"
     
     local sys_msg = "[Sistema]: Informação coletada. Analise o resultado e continue."
-    if not should_continue_loop and M.is_autonomous then
+    if not should_continue_loop and react_loop.state.is_autonomous then
         sys_msg = "[Sistema]: Ação executada. Verifique se o passo foi concluído ou prossiga para a próxima ação."
     end
 
@@ -547,15 +348,15 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
 })
 
 vim.cmd([[
-  command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
-  command! -nargs=0 ContextUndo lua require('multi_context').ContextUndo()
-  command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
-  command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()
-  command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
-  command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
-  command! -nargs=0 ContextTree lua require('multi_context').ContextTree()
-  command! -nargs=0 ContextBuffers lua require('multi_context').ContextBuffers()
-  command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
+command! -range Context lua require('multi_context').ContextChatHandler(<line1>, <line2>)
+command! -nargs=0 ContextUndo lua require('multi_context').ContextUndo()
+command! -nargs=0 ContextFolder lua require('multi_context').ContextChatFolder()
+command! -nargs=0 ContextRepo lua require('multi_context').ContextChatRepo()
+command! -nargs=0 ContextGit lua require('multi_context').ContextChatGit()
+command! -nargs=0 ContextApis lua require('multi_context').ContextApis()
+command! -nargs=0 ContextTree lua require('multi_context').ContextTree()
+command! -nargs=0 ContextBuffers lua require('multi_context').ContextBuffers()
+command! -nargs=0 ContextToggle lua require('multi_context').TogglePopup()
 ]])
 
 return M
