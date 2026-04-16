@@ -24,6 +24,9 @@ M.parse_user_input = function(raw_text, agents_table)
         parsed.text_to_send = parsed.text_to_send:gsub("%-%-auto%s*", "")
     end
 
+		-- NOVO: Limpa espaços em branco residuais nas bordas após remover as tags
+    parsed.text_to_send = parsed.text_to_send:gsub("^%s*", ""):gsub("%s*$", "")
+
     return parsed
 end
 

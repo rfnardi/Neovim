@@ -9,7 +9,8 @@ local valid_tools_list = {
 -- 1. SANITIZADOR ANTI-ALUCINAÇÃO DE SINTAXE
 M.sanitize_payload = function(content)
     local c = content
-    c = c:gsub("</[^>]*tool_call%s*>", "</tool_call>")
+    -- Corrigido para [^<]* para que ele engula o ">" do </arg_value>tool_call>
+    c = c:gsub("</[^<]*tool_call%s*>", "</tool_call>")
     c = c:gsub("<tool_call>%s*([a-zA-Z_]+)%s*>", '<tool_call name="%1">')
     for _, tool in ipairs(valid_tools_list) do
         c = c:gsub("<" .. tool .. "%s*>", '<tool_call name="' .. tool .. '">')
@@ -18,7 +19,6 @@ M.sanitize_payload = function(content)
     end
     return c
 end
-
 local function get_attr(attrs, n) 
     if not attrs then return nil end
     return attrs:match(n .. '%s*=%s*["\']([^"\']+)["\']') 
