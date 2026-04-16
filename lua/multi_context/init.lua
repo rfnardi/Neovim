@@ -5,11 +5,11 @@ local popup = require('multi_context.ui.popup')
 local commands = require('multi_context.commands')
 local config = require('multi_context.config')
 
--- Novos Módulos de Responsabilidade Única (Refatoração Fase 13)
 local tool_parser = require('multi_context.tool_parser')
 local tool_runner = require('multi_context.tool_runner')
 local react_loop = require('multi_context.react_loop')
 local prompt_parser = require('multi_context.prompt_parser')
+local scroller = require('multi_context.ui.scroller')
 
 local M = {}
 M.popup_buf = popup.popup_buf
@@ -133,7 +133,6 @@ function M.SendFromPopup()
     if #queued_tasks_lines > 0 then react_loop.state.queued_tasks = table.concat(queued_tasks_lines, "\n") end
     if raw_user_text == "" then vim.notify("Digite algo antes de enviar.", vim.log.levels.WARN); return end
 
-    -- Utiliza o Parser Desacoplado
     local parsed_intent = prompt_parser.parse_user_input(raw_user_text, agents)
     
     if parsed_intent.agent_name then
@@ -172,6 +171,11 @@ function M.SendFromPopup()
         if last_line:match("%[Enviando requisi") then api.nvim_buf_set_lines(buf, count - 2, count, false, {}) end
     end
 
+    -- ========================================================
+    -- NOVA INTEGRAÇÃO: Inicia o rastreamento do Scroller
+    -- ========================================================
+    scroller.start_streaming(buf, popup.popup_win)
+
     require('multi_context.api_client').execute(messages, 
         function(chunk, api_entry)
             if not response_started then
@@ -188,13 +192,19 @@ function M.SendFromPopup()
                 local last_line = api.nvim_buf_get_lines(buf, count - 1, count, false)[1]
                 lines_to_add[1] = last_line .. lines_to_add[1]
                 api.nvim_buf_set_lines(buf, count - 1, count, false, lines_to_add)
+                
+                -- ========================================================
+                -- NOVA INTEGRAÇÃO: Delega o controle de movimento da tela
+                -- ========================================================
+                scroller.on_chunk_received(buf, popup.popup_win)
+                
                 if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
-                    api.nvim_win_set_cursor(popup.popup_win, { api.nvim_buf_line_count(buf), 0 })
-                    vim.cmd("normal! zz"); popup.update_title()
+                    popup.update_title()
                 end
             end
         end,
         function(api_entry, metrics)
+            scroller.stop_streaming(buf) -- Desliga o monitor ao finalizar
             if not response_started then remove_sending_msg() end
             if metrics and (metrics.cache_read_input_tokens or 0) > 0 then
                 vim.notify(string.format("⚡ Prompt Caching: %d tokens economizados!", metrics.cache_read_input_tokens), vim.log.levels.INFO)
@@ -211,6 +221,7 @@ function M.SendFromPopup()
             else M.TerminateTurn() end
         end,
         function(err_msg)
+            scroller.stop_streaming(buf) -- Desliga o monitor se falhar
             remove_sending_msg()
             api.nvim_buf_set_lines(buf, -1, -1, false, { "", "**[ERRO]** " .. err_msg, "", user_prefix .. " " })
             react_loop.state.is_autonomous = false
@@ -238,7 +249,6 @@ function M.ExecuteTools(ia_idx)
     local prefix_lines = {}; for i = 1, last_ia_idx - 1 do table.insert(prefix_lines, lines[i]) end
     local process_lines = {}; for i = last_ia_idx, #lines do table.insert(process_lines, lines[i]) end
     
-    -- Utiliza o Parser Desacoplado
     local content_to_process = tool_parser.sanitize_payload(table.concat(process_lines, "\n"))
 
     local new_content = ""
@@ -273,9 +283,6 @@ function M.ExecuteTools(ia_idx)
 
         has_changes = true
 
-        -- ==========================================
-        -- BLOCO ISOLADO PARA RESOLVER O ERRO DO GOTO
-        -- ==========================================
         do
             local tag_output, should_abort, cont_loop, rew_content, backup_made = tool_runner.execute(
                 parsed_tag, 
@@ -320,7 +327,6 @@ function M.ExecuteTools(ia_idx)
         M.TerminateTurn(); return
     end
 
-    -- Circuit Breaker isolado
     if react_loop.check_circuit_breaker() then
         M.TerminateTurn(); return
     end
