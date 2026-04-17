@@ -1,6 +1,6 @@
+-- lua/multi_context/api_handlers.lua
 local M = {}
 
--- FASE 1: Tracker global de arquivos temporários para limpeza na saída
 _G.MultiContextTempFiles = _G.MultiContextTempFiles or {}
 
 local function decode_json_string(s)
@@ -50,16 +50,13 @@ local function write_payload_to_tmp(payload)
 end
 
 local function remove_tmp(file)
-    os.remove(file)
-    for i, f in ipairs(_G.MultiContextTempFiles) do
-        if f == file then table.remove(_G.MultiContextTempFiles, i); break end
-    end
+    pcall(os.remove, file)
 end
 
 M.gemini = {
     make_request = function(api_config, messages, api_keys, last_sig, callback)
         local api_key = api_keys[api_config.name] or ""
-        if api_key == "" then callback("\n[ERRO]: Chave não encontrada para " .. api_config.name, nil, false); callback(nil, nil, true); return end
+        if api_key == "" then callback("\n[ERRO]: Chave não encontrada.", nil, false); callback(nil, nil, true); return end
         local contents = {}; local system_instruction = nil
         for _, msg in ipairs(messages) do
             if msg.role == "system" then system_instruction = { parts = { { text = msg.content } } }
@@ -70,7 +67,7 @@ M.gemini = {
         local tmp_file = write_payload_to_tmp(payload)
         local cmd = { "curl", "-s", "-N", "-L", "-X", "POST", api_config.url:gsub(":generateContent", ":streamGenerateContent") .. "?key=" .. api_key, "-H", "Content-Type: application/json", "-d", "@" .. tmp_file }
         local buffer = ""; local full_response = ""
-        vim.fn.jobstart(cmd, {
+        local job_id = vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
                 if not data then return end
                 local raw = table.concat(data, "\n")
@@ -89,21 +86,20 @@ M.gemini = {
                 callback(nil, nil, true)
             end,
         })
+        callback(nil, nil, false, nil, job_id)
     end,
 }
 
 M.openai = {
     make_request = function(api_config, messages, api_keys, _, callback)
         local api_key = api_keys[api_config.name] or ""
-        -- Injeção do stream_options para capturar métricas de cache (OpenAI / DeepSeek)
         local payload = { model = api_config.model, messages = messages, stream = true, stream_options = { include_usage = true } }
         local tmp_file = write_payload_to_tmp(payload)
         local cmd = { "curl", "-s", "-N", "-L", "-X", "POST", api_config.url }
         for _, h in ipairs(header_args(api_config, api_key)) do table.insert(cmd, h) end
         table.insert(cmd, "-d"); table.insert(cmd, "@" .. tmp_file)
-        local full_response = ""
-        local metrics = nil
-        vim.fn.jobstart(cmd, {
+        local full_response = ""; local metrics = nil
+        local job_id = vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
                 if not data then return end
                 for _, line in ipairs(data) do
@@ -116,7 +112,6 @@ M.openai = {
                             end
                             if type(dec.usage) == "table" then
                                 metrics = metrics or {}
-                                -- Suporta tanto o padrao OpenAI quanto o DeepSeek
                                 metrics.cache_read_input_tokens = (type(dec.usage.prompt_tokens_details) == "table" and dec.usage.prompt_tokens_details.cached_tokens) or dec.usage.prompt_cache_hit_tokens or 0
                             end
                         end
@@ -132,43 +127,32 @@ M.openai = {
                 callback(nil, nil, true, metrics) 
             end,
         })
+        callback(nil, nil, false, nil, job_id)
     end,
 }
 
 M.anthropic = {
     make_request = function(api_config, messages, api_keys, _, callback)
         local api_key = api_keys[api_config.name] or ""
-        local system_text = ""
-        local anthropic_msgs = {}
+        local system_text = ""; local anthropic_msgs = {}
         for _, msg in ipairs(messages) do
-            if msg.role == "system" then
-                system_text = system_text .. msg.content .. "\n"
-            else
-                table.insert(anthropic_msgs, {role = msg.role, content = msg.content})
-            end
+            if msg.role == "system" then system_text = system_text .. msg.content .. "\n"
+            else table.insert(anthropic_msgs, {role = msg.role, content = msg.content}) end
         end
         local payload = {
-            model = api_config.model,
-            messages = anthropic_msgs,
-            system = {
-                -- AQUI ESTÁ A MÁGICA: O cache_control inserido no último bloco do system_prompt
-                { type = "text", text = vim.trim(system_text), cache_control = { type = "ephemeral" } }
-            },
-            stream = true,
-            max_tokens = 4096
+            model = api_config.model, messages = anthropic_msgs,
+            system = { { type = "text", text = vim.trim(system_text), cache_control = { type = "ephemeral" } } },
+            stream = true, max_tokens = 4096
         }
         local tmp_file = write_payload_to_tmp(payload)
         local cmd = {
             "curl", "-s", "-N", "-L", "-X", "POST", api_config.url,
-            "-H", "x-api-key: " .. api_key,
-            "-H", "anthropic-version: 2023-06-01",
-            "-H", "anthropic-beta: prompt-caching-2024-07-31",
-            "-H", "content-type: application/json",
+            "-H", "x-api-key: " .. api_key, "-H", "anthropic-version: 2023-06-01",
+            "-H", "anthropic-beta: prompt-caching-2024-07-31", "-H", "content-type: application/json",
             "-d", "@" .. tmp_file
         }
-        local full_response = ""
-        local metrics = nil
-        vim.fn.jobstart(cmd, {
+        local full_response = ""; local metrics = nil
+        local job_id = vim.fn.jobstart(cmd, {
             on_stdout = function(_, data)
                 if not data then return end
                 for _, line in ipairs(data) do
@@ -176,11 +160,9 @@ M.anthropic = {
                     if line:match("^data: ") then
                         local ok, dec = pcall(vim.fn.json_decode, line:sub(7))
                         if ok then
-                            if dec.type == "content_block_delta" and dec.delta and dec.delta.text then
-                                callback(dec.delta.text, nil, false)
+                            if dec.type == "content_block_delta" and dec.delta and dec.delta.text then callback(dec.delta.text, nil, false)
                             elseif dec.type == "message_start" and type(dec.message) == "table" and type(dec.message.usage) == "table" then
-                                metrics = metrics or {}
-                                metrics.cache_read_input_tokens = dec.message.usage.cache_read_input_tokens or 0
+                                metrics = metrics or {}; metrics.cache_read_input_tokens = dec.message.usage.cache_read_input_tokens or 0
                             end
                         end
                     end
@@ -190,13 +172,12 @@ M.anthropic = {
                 remove_tmp(tmp_file)
                 if full_response:match('"error"') and not full_response:match('"type": "message_start"') then
                     local ok, dec = pcall(vim.fn.json_decode, full_response)
-                    if ok and dec.error and dec.error.message then
-                        callback("\n\n**[ERRO ANTHROPIC]:** " .. dec.error.message .. "\n", nil, false)
-                    end
+                    if ok and dec.error and dec.error.message then callback("\n\n**[ERRO ANTHROPIC]:** " .. dec.error.message .. "\n", nil, false) end
                 end
                 callback(nil, nil, true, metrics)
             end
         })
+        callback(nil, nil, false, nil, job_id)
     end,
 }
 
@@ -206,7 +187,7 @@ M.cloudflare = {
         local tmp_file = write_payload_to_tmp({ messages = messages })
         local output = ""
         local cmd = { "curl", "-s", "-L", "-X", "POST", api_config.url, "-H", "Content-Type: application/json", "-H", "Authorization: Bearer " .. api_key, "-d", "@" .. tmp_file }
-        vim.fn.jobstart(cmd, {
+        local job_id = vim.fn.jobstart(cmd, {
             on_stdout = function(_, data) if data then output = output .. table.concat(data, "\n") end end,
             on_exit = function()
                 remove_tmp(tmp_file)
@@ -216,6 +197,7 @@ M.cloudflare = {
                 callback(nil, nil, true)
             end,
         })
+        callback(nil, nil, false, nil, job_id)
     end,
 }
 

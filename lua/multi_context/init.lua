@@ -163,6 +163,7 @@ function M.SendFromPopup()
     end
 
     local response_started = false
+    local accumulated_text = ""
     local current_ia_start_idx = nil
     
     local function remove_sending_msg()
@@ -171,12 +172,13 @@ function M.SendFromPopup()
         if last_line:match("%[Enviando requisi") then api.nvim_buf_set_lines(buf, count - 2, count, false, {}) end
     end
 
-    -- ========================================================
-    -- NOVA INTEGRAÇÃO: Inicia o rastreamento do Scroller
-    -- ========================================================
     scroller.start_streaming(buf, popup.popup_win)
 
     require('multi_context.api_client').execute(messages, 
+        function(job_id)
+            react_loop.state.active_job_id = job_id
+            react_loop.state.user_aborted = false
+        end,
         function(chunk, api_entry)
             if not response_started then
                 remove_sending_msg()
@@ -193,10 +195,20 @@ function M.SendFromPopup()
                 lines_to_add[1] = last_line .. lines_to_add[1]
                 api.nvim_buf_set_lines(buf, count - 1, count, false, lines_to_add)
                 
-                -- ========================================================
-                -- NOVA INTEGRAÇÃO: Delega o controle de movimento da tela
-                -- ========================================================
                 scroller.on_chunk_received(buf, popup.popup_win)
+                
+                -- ===============================================
+                -- MONITORAMENTO LIVE (Auto-Halt)
+                -- ===============================================
+                accumulated_text = accumulated_text .. chunk
+                if accumulated_text:match("</tool_call>%s*$") then
+                    local tags = {}
+                    for n in accumulated_text:gmatch('<tool_call[^>]*name="([^"]+)"') do table.insert(tags, n) end
+                    local last_name = tags[#tags]
+                    if last_name and (last_name == "edit_file" or last_name == "replace_lines" or last_name == "run_shell") then
+                        react_loop.abort_stream(false)
+                    end
+                end
                 
                 if popup.popup_win and api.nvim_win_is_valid(popup.popup_win) then
                     popup.update_title()
@@ -204,7 +216,16 @@ function M.SendFromPopup()
             end
         end,
         function(api_entry, metrics)
-            scroller.stop_streaming(buf) -- Desliga o monitor ao finalizar
+            scroller.stop_streaming(buf)
+            react_loop.state.active_job_id = nil
+            
+            -- Trata o Abort Manual <C-x> e Automático
+            if react_loop.state.user_aborted then
+                api.nvim_buf_set_lines(buf, -1, -1, false, { "", ">[Sistema]: 🛑 Geração interrompida pelo usuário." })
+                M.TerminateTurn()
+                return
+            end
+            
             if not response_started then remove_sending_msg() end
             if metrics and (metrics.cache_read_input_tokens or 0) > 0 then
                 vim.notify(string.format("⚡ Prompt Caching: %d tokens economizados!", metrics.cache_read_input_tokens), vim.log.levels.INFO)
@@ -221,7 +242,7 @@ function M.SendFromPopup()
             else M.TerminateTurn() end
         end,
         function(err_msg)
-            scroller.stop_streaming(buf) -- Desliga o monitor se falhar
+            scroller.stop_streaming(buf)
             remove_sending_msg()
             api.nvim_buf_set_lines(buf, -1, -1, false, { "", "**[ERRO]** " .. err_msg, "", user_prefix .. " " })
             react_loop.state.is_autonomous = false
