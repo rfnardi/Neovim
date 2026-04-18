@@ -1,75 +1,46 @@
 #!/bin/bash
-TARGET_DIR="lua/multi_context"
 
-cat << 'EOF' > "$TARGET_DIR/ui/scroller.lua"
--- lua/multi_context/ui/scroller.lua
-local api = vim.api
-local M = {}
+REPO_DIR="$HOME/repos/multi_context_plugin"
+NVIM_DIR="$HOME/.config/nvim"
 
-M.state = {
-    is_streaming = false,
-    is_following = true,
-    last_row = 0,
-    augroup = api.nvim_create_augroup("MultiContextScroller", { clear = true })
-}
+echo "🚀 Iniciando a migração do plugin para repositório independente..."
 
-M.start_streaming = function(buf, win)
-    M.state.is_streaming = true
-    M.state.is_following = true
-    M.state.last_row = 0
+# 1. Cria a estrutura do repositório
+mkdir -p "$REPO_DIR/lua"
 
-    if win and api.nvim_win_is_valid(win) and buf and api.nvim_buf_is_valid(buf) then
-        local lines = api.nvim_buf_line_count(buf)
-        pcall(api.nvim_win_set_cursor, win, {lines, 0})
-        M.state.last_row = lines
-    end
+# 2. Move a pasta lua (Código Fonte)
+if [ -d "$NVIM_DIR/lua/multi_context" ]; then
+    mv "$NVIM_DIR/lua/multi_context" "$REPO_DIR/lua/"
+    echo "✅ Código fonte movido com sucesso!"
+else
+    echo "⚠️ Pasta lua/multi_context não encontrada no Neovim."
+fi
 
-    api.nvim_clear_autocmds({ group = M.state.augroup, buffer = buf })
-    api.nvim_create_autocmd("CursorMoved", {
-        group = M.state.augroup,
-        buffer = buf,
-        callback = function()
-            if not M.state.is_streaming then return end
-            if not api.nvim_win_is_valid(win) then return end
-            
-            local cursor_row = api.nvim_win_get_cursor(win)[1]
-            local total_lines = api.nvim_buf_line_count(buf)
-            
-            -- A SUA LÓGICA: Tem que estar estritamente na última linha para seguir!
-            if cursor_row == total_lines then
-                M.state.is_following = true
-            -- Qualquer subida real (mesmo que apenas 1 k) vai ser menor que a last_row
-            elseif cursor_row < M.state.last_row then
-                M.state.is_following = false
-            end
-            
-            M.state.last_row = cursor_row
-        end
-    })
-end
+# 3. Move os arquivos de documentação e testes
+for file in README.md CONTEXT.md Makefile; do
+    if [ -f "$NVIM_DIR/$file" ]; then
+        mv "$NVIM_DIR/$file" "$REPO_DIR/"
+        echo "✅ $file movido com sucesso!"
+    fi
+done
 
-M.on_chunk_received = function(buf, win)
-    if not M.state.is_streaming then return end
-    
-    if M.state.is_following then
-        if win and api.nvim_win_is_valid(win) and buf and api.nvim_buf_is_valid(buf) then
-            local lines = api.nvim_buf_line_count(buf)
-            pcall(api.nvim_win_set_cursor, win, {lines, 0})
-            vim.api.nvim_win_call(win, function()
-                vim.cmd("normal! G")
-            end)
-        end
-    end
-end
-
-M.stop_streaming = function(buf)
-    M.state.is_streaming = false
-    M.state.is_following = true
-    M.state.last_row = 0
-    pcall(api.nvim_clear_autocmds, { group = M.state.augroup, buffer = buf })
-end
-
-return M
+# 4. Cria um .gitignore padrão para segurança
+cat << 'EOF' > "$REPO_DIR/.gitignore"
+# Ignora arquivos temporários e chaves vazadas
+*.json
+!agents/agents.json
+.DS_Store
+.luarc.json
+mctx_backup_*.mctx
+.mctx_chats/
 EOF
+echo "✅ .gitignore de segurança criado!"
 
-echo "✅ Scroller atualizado: Matemática simplificada e exata aplicada com sucesso!"
+# 5. Inicializa o repositório Git
+cd "$REPO_DIR" || exit
+git init
+git add .
+git commit -m "chore: projeto extraido para repositorio independente"
+echo "✅ Repositório Git inicializado em $REPO_DIR"
+
+echo "🎉 Migração concluída!"
