@@ -1,0 +1,27 @@
+{
+  "default_api": "api_A",
+  "fallback_mode": true,
+  "user_tolerance": 1,
+  "appearance": {
+    "border": "rounded",
+    "width": 0.8,
+    "height": 0.7,
+    "title": " 🤖 MultiContext AI "
+  },
+  "watchdog": {
+    "fixed_target": 1500,
+    "strategy": "semantic",
+    "mode": "off",
+    "percent": 0.3
+  },
+  "debug_mode": false,
+  "cognitive_horizon": 4000,
+  "master_prompt": "Você é um Engenheiro de Software Autônomo no Neovim.",
+  "apis": [
+    {
+      "name": "api_mock",
+      "allow_spawn": true,
+      "abstraction_level": "medium"
+    }
+  ]
+}

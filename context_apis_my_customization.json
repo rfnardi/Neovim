@@ -1,5 +1,5 @@
 {
-  "default_api": "open_router_deepseek_v4-flash-1",
+  "default_api": "api_A",
   "fallback_mode": true,
   "user_tolerance": 1,
   "appearance": {
