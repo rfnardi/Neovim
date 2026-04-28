@@ -1,173 +1,76 @@
 {
-  "default_api": "groq1",
+  "default_api": "openai",
   "fallback_mode": true,
   "apis": [
-    {
+		{
       "headers": {
         "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
+        "Authorization": "Bearer {API_KEY}"
       },
-      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
-      "name": "google_gemini_3.1-pro",
-      "model": "gemini-3.1-pro-preview",
-      "num_tries": 5,
-      "include_in_fall-back_mode": true,
-      "api_type": "gemini"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
-      },
-      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
-      "name": "google_gemini_2.5-pro",
-      "model": "gemini-2.5-pro",
-      "num_tries": 5,
-      "include_in_fall-back_mode": true,
-      "api_type": "gemini"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
-      },
-      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      "name": "google_gemini_2.5-flash",
-      "model": "gemini-2.5-flash",
-      "num_tries": 2,
-      "include_in_fall-back_mode": true,
-      "api_type": "gemini"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "X-goog-api-key": "{API_KEY}"
-      },
-      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-      "name": "google_gemini_2.0-flash",
-      "model": "gemini-2.0-flash",
+      "api_type": "openai",
+      "name": "open_router_deepseek_v4-flash---1",
+      "model": "deepseek/deepseek-v4-flash",
       "num_tries": 3,
-      "include_in_fall-back_mode": true,
-      "api_type": "gemini"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {API_KEY}"
-      },
-      "url": "https://api.moonshot.ai/v1/chat/completions",
-      "name": "kimi-k2",
-      "model": "kimi-k2-thinking",
-      "num_tries": 4,
-      "include_in_fall-back_mode": true,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {API_KEY}"
-      },
-      "url": "https://api.deepseek.com/chat/completions",
-      "name": "deepseek",
-      "model": "deepseek-chat",
-      "num_tries": 2,
-      "include_in_fall-back_mode": true,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {API_KEY}"
-      },
       "url": "https://openrouter.ai/api/v1/chat/completions",
-      "name": "open_router_qwen3-coder",
-      "model": "qwen/qwen3-coder:free",
-      "num_tries": 2,
       "include_in_fall-back_mode": true,
-      "api_type": "openai"
+			"allow_spawn": true,
+			"abstraction_level": "high"
     },
-    {
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "url": "http://127.0.0.1:11434/v1/chat/completions",
-      "name": "ollama_local",
-      "model": "codellama:7b-instruct",
-      "num_tries": 3,
-      "include_in_fall-back_mode": false,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "{API_KEY}"
-      },
-      "url": "https://api.z.ai/api/paas/v4/chat/completions",
-      "name": "zai_GLM-5",
-      "model": "glm-5",
-      "num_tries": 3,
-      "include_in_fall-back_mode": false,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "{API_KEY}"
-      },
-      "url": "https://api.openai.com/v1/chat/completions",
-      "name": "openai",
-      "model": "gpt-3.5-turbo",
-      "num_tries": 3,
-      "include_in_fall-back_mode": false,
-      "api_type": "openai"
-    },
-    {
+		{
       "headers": {
         "Content-Type": "application/json",
         "Authorization": "Bearer {API_KEY}"
       },
-      "url": "https://api.us-west-2.modal.direct/v1/chat/completions",
-      "name": "modal-zai_GLM-5",
-      "model": "zai-org/GLM-5.1-FP8",
-      "num_tries": 1,
-      "include_in_fall-back_mode": true,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {API_KEY}"
-      },
-      "url": "https://api.groq.com/openai/v1/chat/completions",
-      "name": "groq1",
-      "model": "openai/gpt-oss-120b",
-      "num_tries": 1,
-      "include_in_fall-back_mode": true,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer {API_KEY}"
-      },
-      "url": "https://api.groq.com/openai/v1/chat/completions",
-      "name": "groq2",
-      "model": "openai/gpt-oss-120b",
-      "num_tries": 1,
-      "include_in_fall-back_mode": true,
-      "api_type": "openai"
-    },
-    {
-      "headers": {
-        "Content-Type": "application/json",
-        "Authorization": "{API_KEY}"
-      },
-      "url": "https://api.cloudflare.com/client/v4/accounts/SEU_ACCOUNT_ID/ai/run/@cf/meta/llama-3-8b-instruct",
-      "name": "cloudflare",
-      "model": "@cf/meta/llama-3-8b-instruct",
+      "api_type": "openai",
+      "name": "open_router_deepseek_v4-flash---2",
+      "model": "deepseek/deepseek-v4-flash",
       "num_tries": 3,
-      "include_in_fall-back_mode": false,
-      "api_type": "cloudflare"
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "include_in_fall-back_mode": true,
+			"allow_spawn": true,
+			"abstraction_level": "high"
+    },
+		{
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {API_KEY}"
+      },
+      "api_type": "openai",
+      "name": "open_router_deepseek_v4-flash---3",
+      "model": "deepseek/deepseek-v4-flash",
+      "num_tries": 3,
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "include_in_fall-back_mode": true,
+			"allow_spawn": true,
+			"abstraction_level": "high"
+    },
+		{
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {API_KEY}"
+      },
+      "api_type": "openai",
+      "name": "open_router_deepseek_v4-flash---4",
+      "model": "deepseek/deepseek-v4-flash",
+      "num_tries": 3,
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "include_in_fall-back_mode": true,
+			"allow_spawn": true,
+			"abstraction_level": "medium"
+    },
+		{
+      "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer {API_KEY}"
+      },
+      "api_type": "openai",
+      "name": "nvidia_api_qwen3.5-379B",
+      "model": "qwen/qwen3.5-397b-a17b",
+      "num_tries": 3,
+      "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "include_in_fall-back_mode": true,
+			"allow_spawn": true,
+			"abstraction_level": "low"
     }
   ]
 }

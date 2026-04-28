@@ -1,0 +1,1 @@
+{"squad_dev": {"description": "Esquadrão padrao de desenvolvimento e qualidade", "tasks": [{"agent": "tech_lead", "instruction": "Analise o pedido do usuario e orquestre o desenvolvimento.", "allow_switch": [], "chain": ["coder", "qa"]}]}}
